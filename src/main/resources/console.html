@@ -54,6 +54,13 @@
         const autoRefresh = document.getElementById('autoRefresh');
         const intervalInput = document.getElementById('intervalInput');
         let timer = null;
+        let ws = null;
+        let wsConnected = false;
+        const decoder = new TextDecoder('utf-8');
+        let pending = [];
+        let flushScheduled = false;
+        function nearBottom() { return Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < 10; }
+        function scrollBottom() { container.scrollTop = container.scrollHeight; }
 
         async function fetchConsole() {
             const t0 = Date.now();
@@ -70,6 +77,55 @@
             }
         }
 
+        function appendLine(line) {
+            const clean = (line || '').replace(/\r/g, '');
+            const withNl = clean.endsWith('\n') ? clean : clean + '\n';
+            pending.push(withNl);
+            if (!flushScheduled) {
+                flushScheduled = true;
+                requestAnimationFrame(() => {
+                    flushScheduled = false;
+                    const atBottom = nearBottom();
+                    const chunk = pending.join('');
+                    pending = [];
+                    logEl.textContent += chunk;
+                    if (atBottom) scrollBottom();
+                });
+            }
+        }
+
+        function connectWebSocket() {
+            try {
+                const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+                ws = new WebSocket(url);
+                ws.onopen = () => {
+                    wsConnected = true;
+                    statusText.textContent = 'WebSocket已连接';
+                    try { ws.send(JSON.stringify({ type: 'connect' })); } catch {}
+                    if (autoRefresh.checked) { autoRefresh.checked = false; stopAuto(); }
+                };
+                ws.onmessage = (ev) => {
+                    try {
+                        const msg = JSON.parse(ev.data);
+                        if (msg && msg.type === 'console') {
+                            let text = '';
+                            if (typeof msg.line64 === 'string') {
+                                const bin = atob(msg.line64);
+                                const bytes = new Uint8Array(bin.length);
+                                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                                text = decoder.decode(bytes);
+                            } else if (typeof msg.line === 'string') {
+                                text = msg.line;
+                            }
+                            if (text) appendLine(text);
+                        }
+                    } catch {}
+                };
+                ws.onerror = () => { statusText.textContent = 'WebSocket错误'; };
+                ws.onclose = () => { wsConnected = false; statusText.textContent = 'WebSocket已关闭'; };
+            } catch {}
+        }
+
         function startAuto() {
             stopAuto();
             const interval = Math.max(500, parseInt(intervalInput.value || '2000', 10));
@@ -82,7 +138,7 @@
         intervalInput.addEventListener('change', () => { if (autoRefresh.checked) startAuto(); });
 
         fetchConsole();
+        connectWebSocket();
     </script>
 </body>
 </html>
-

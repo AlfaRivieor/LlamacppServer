@@ -87,6 +87,10 @@ public class ModelLaunchOptions {
         command.add("--no-webui");
         command.add("-fa");
         command.add("1");
+        
+        command.add("-np");
+        command.add("4");
+        
         return command;
     }
 }

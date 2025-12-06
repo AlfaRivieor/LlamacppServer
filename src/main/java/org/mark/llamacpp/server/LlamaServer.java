@@ -34,7 +34,8 @@ public class LlamaServer {
     public static void main(String[] args) {
         try {
             Files.createDirectories(CONSOLE_LOG_PATH.getParent());
-            PrintStream ps = new PrintStream(new FileOutputStream(CONSOLE_LOG_PATH.toFile(), true), true, StandardCharsets.UTF_8.name());
+            ConsoleBroadcastOutputStream out = new ConsoleBroadcastOutputStream(new FileOutputStream(CONSOLE_LOG_PATH.toFile(), true), StandardCharsets.UTF_8);
+            PrintStream ps = new PrintStream(out, true, StandardCharsets.UTF_8.name());
             System.setOut(ps);
             System.setErr(ps);
         } catch (Exception e) {
@@ -139,5 +140,9 @@ public class LlamaServer {
      */
     public static void sendModelStopEvent(String modelId, boolean success, String message) {
         WebSocketManager.getInstance().sendModelStopEvent(modelId, success, message);
+    }
+    
+    public static void sendConsoleLineEvent(String modelId, String line) {
+        WebSocketManager.getInstance().sendConsoleLineEvent(modelId, line);
     }
 }

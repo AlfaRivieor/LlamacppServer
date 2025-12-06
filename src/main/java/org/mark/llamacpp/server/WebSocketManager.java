@@ -2,8 +2,8 @@ package org.mark.llamacpp.server;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -15,8 +15,6 @@ import java.util.concurrent.TimeUnit;
  * WebSocket连接管理器
  */
 public class WebSocketManager {
-    
-    private static final Logger logger = LoggerFactory.getLogger(WebSocketManager.class);
     
     // 单例实例
     private static volatile WebSocketManager instance;
@@ -62,8 +60,7 @@ public class WebSocketManager {
         connectionCounter++;
         String connectionId = "conn-" + connectionCounter;
         connections.put(connectionId, ctx);
-        connectionStatus.put(connectionId, false); // 初始状态为未确认
-        logger.info("新的WebSocket连接建立: {}, 当前连接数: {}", connectionId, connections.size());
+        connectionStatus.put(connectionId, false);
         return connectionId;
     }
     
@@ -73,7 +70,6 @@ public class WebSocketManager {
     public void removeConnection(String connectionId) {
         connections.remove(connectionId);
         connectionStatus.remove(connectionId);
-        logger.info("WebSocket连接关闭: {}, 当前连接数: {}", connectionId, connections.size());
     }
     
     /**
@@ -83,11 +79,8 @@ public class WebSocketManager {
         ChannelHandlerContext ctx = connections.get(connectionId);
         if (ctx != null && ctx.channel().isActive()) {
             ctx.writeAndFlush(new TextWebSocketFrame(message));
-            logger.debug("向连接 {} 发送消息: {}", connectionId, message);
         } else {
-            // 移除不活跃的连接
             connections.remove(connectionId);
-            logger.warn("连接 {} 不存在或已关闭，无法发送消息", connectionId);
         }
     }
     
@@ -104,10 +97,9 @@ public class WebSocketManager {
             
             if (ctx.channel().isActive()) {
                 ctx.writeAndFlush(new TextWebSocketFrame(message));
-                return false; // 保留连接
+                return false;
             } else {
-                logger.info("移除不活跃的连接: {}", connectionId);
-                return true; // 移除连接
+                return true;
             }
         });
     }
@@ -125,7 +117,6 @@ public class WebSocketManager {
     public void confirmConnection(String connectionId) {
         if (connections.containsKey(connectionId)) {
             connectionStatus.put(connectionId, true);
-            logger.info("WebSocket连接已确认: {}", connectionId);
         }
     }
     
@@ -172,7 +163,6 @@ public class WebSocketManager {
                 
                 broadcast(statusMessage);
             } catch (Exception e) {
-                logger.error("发送系统状态时发生错误", e);
             }
         }
     }
@@ -207,11 +197,22 @@ public class WebSocketManager {
         broadcast(eventMessage);
     }
     
+    public void sendConsoleLineEvent(String modelId, String line) {
+        byte[] bytes = line == null ? new byte[0] : line.getBytes(StandardCharsets.UTF_8);
+        String b64 = Base64.getEncoder().encodeToString(bytes);
+        String eventMessage = String.format(
+            "{\"type\":\"console\",\"modelId\":\"%s\",\"line64\":\"%s\",\"timestamp\":%d}",
+            modelId != null ? modelId.replace("\"", "\\\"") : "",
+            b64,
+            System.currentTimeMillis()
+        );
+        broadcast(eventMessage);
+    }
+    
     /**
      * 关闭管理器，释放资源
      */
     public void shutdown() {
-        logger.info("关闭WebSocket管理器");
         scheduler.shutdown();
         try {
             if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {

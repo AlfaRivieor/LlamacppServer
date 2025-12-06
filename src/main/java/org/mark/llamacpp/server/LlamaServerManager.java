@@ -434,37 +434,37 @@ public class LlamaServerManager {
 		AtomicBoolean loadSuccess = new AtomicBoolean(false);
 		
 		// 设置输出处理器，接受llamacpp运行状态，然后判断特定的内容。
-		process.setOutputHandler(line -> {
-			//	判断是否加载成功。
-			//	1.这是成功了
-			if(line.contains("srv  update_slots: all slots are idle")) {
-				loadSuccess.set(true);
-				latch.countDown();
-			}
-			//	2.这是失败了
-			if(line.contains("main: exiting due to model loading error")) {
-				loadSuccess.set(false);
-				latch.countDown();
-			}
-			//	3.检测进程异常终止
-			if(line.contains("Inferior") && line.contains("detached")) {
-				// 检测到进程异常终止，如 [Inferior 1 (process 6869) detached]
-				System.err.println("检测到模型进程异常终止: " + line);
-				
-				// 设置加载失败状态
-				loadSuccess.set(false);
-				
-				// 从已加载进程列表中移除
-				loadedProcesses.remove(modelId);
-				modelPorts.remove(modelId);
-				
-				// 通过WebSocket广播模型停止事件
-				LlamaServer.sendModelStopEvent(modelId, false, "模型进程异常终止: " + line);
-				
-				// 唤醒等待的线程
-				latch.countDown();
-			}
-		});
+        process.setOutputHandler(line -> {
+            //	判断是否加载成功。
+            //	1.这是成功了
+            if(line.contains("srv  update_slots: all slots are idle")) {
+                loadSuccess.set(true);
+                latch.countDown();
+            }
+            //	2.这是失败了
+            if(line.contains("main: exiting due to model loading error")) {
+                loadSuccess.set(false);
+                latch.countDown();
+            }
+            //	3.检测进程异常终止
+            if(line.contains("Inferior") && line.contains("detached")) {
+                // 检测到进程异常终止，如 [Inferior 1 (process 6869) detached]
+                System.err.println("检测到模型进程异常终止: " + line);
+                
+                // 设置加载失败状态
+                loadSuccess.set(false);
+                
+                // 从已加载进程列表中移除
+                loadedProcesses.remove(modelId);
+                modelPorts.remove(modelId);
+                
+                // 通过WebSocket广播模型停止事件
+                LlamaServer.sendModelStopEvent(modelId, false, "模型进程异常终止: " + line);
+                
+                // 唤醒等待的线程
+                latch.countDown();
+            }
+        });
 		
 		// 启动进程
 		boolean started = process.start();
