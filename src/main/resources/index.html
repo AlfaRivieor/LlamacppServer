@@ -1433,7 +1433,7 @@
             if (confirm('确定要停止服务吗？')) {
                 fetch('/api/shutdown', { method: 'POST' }).then(r=>r.json()).then(d => {
                     if (d.success) {
-                        document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;"><h1>服务已停止</h1></div>';
+                        document.body.innerHTML = '<div style="width: 100%;display:flex;justify-content:center;align-items:center;height:100vh;"><h1>服务已停止</h1></div>';
                     }
                 });
             }
