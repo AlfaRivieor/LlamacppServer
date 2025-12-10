@@ -630,9 +630,9 @@ public class LlamaServerManager {
 		// 关闭线程池
 		this.executorService.shutdown();
 		
-		//System.out.println("所有模型进程已停止，即将退出Java进程");
+		System.out.println("所有模型进程已停止，即将退出Java进程");
 		
 		// 退出Java进程
-		//System.exit(0);
+		System.exit(0);
 	}
 }
