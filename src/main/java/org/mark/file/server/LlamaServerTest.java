@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
+import org.mark.llamacpp.gguf.GGUFBundle;
 import org.mark.llamacpp.gguf.GGUFModel;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.struct.VramEstimation;
@@ -26,10 +27,16 @@ public class LlamaServerTest {
 		}
 		
 		long a = System.currentTimeMillis();
-		LlamaServerManager.getInstance().listModel();
+		List<GGUFModel> list = LlamaServerManager.getInstance().listModel();
+		System.err.println(list.get(0).getSize());
 		long b = System.currentTimeMillis();
 		
 		System.err.println("耗时：" + (b - a));
+		
+		
+		GGUFBundle g = new GGUFBundle(new File("D:\\Modesl\\GGUF\\aaaaaaaaaaa\\Qwen3-235B-A22B-Instruct-2507-UD-Q2_K_XL-00001-of-00002.gguf"));
+		
+		System.err.println(g.getTotalFileSize());
 	}
 
 }
