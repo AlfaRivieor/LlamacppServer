@@ -25,7 +25,7 @@ public final class OutputHelper {
 	
 	
 	public static void main(String[] args) {
-		OutputHelper.run("release", LlamaServer.class);
+		OutputHelper.run("releases", LlamaServer.class);
 	}
 	
 	

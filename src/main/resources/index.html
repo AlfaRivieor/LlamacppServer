@@ -1627,7 +1627,7 @@
         }
         function renderModelPathList() {
             const c = document.getElementById('modelPathListContainer');
-            c.innerHTML = (window.__modelPaths || []).map(p => `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>${p}</span><button class="btn btn-danger" style="padding:2px 6px; font-size:12px;" onclick="removeModelPathItem('${p.replace(/\\/g, '\\\\')}')">删除</button></div>`).join('');
+            c.innerHTML = (window.__modelPaths || []).map(p => `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>${p}</span><button type="button" class="btn btn-danger" style="padding:2px 6px; font-size:12px;" onclick="removeModelPathItem('${p.replace(/\\/g, '\\\\')}')">删除</button></div>`).join('');
         }
         function addModelPath() {
             const v = document.getElementById('modelPathInput').value.trim();
@@ -1661,8 +1661,8 @@
              });
         }
         function renderLlamaPathList() {
-             const c = document.getElementById('llamaCppListContainer');
-            c.innerHTML = (window.__llamaPaths || []).map(p => `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>${p}</span><button class="btn btn-danger" style="padding:2px 6px; font-size:12px;" onclick="removeLlamaCppPathItem('${p.replace(/\\/g, '\\\\')}')">删除</button></div>`).join('');
+            const c = document.getElementById('llamaCppListContainer');
+            c.innerHTML = (window.__llamaPaths || []).map(p => `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>${p}</span><button type="button" class="btn btn-danger" style="padding:2px 6px; font-size:12px;" onclick="removeLlamaCppPathItem('${p.replace(/\\/g, '\\\\')}')">删除</button></div>`).join('');
         }
         function addLlamaCppPath() {
              const v = document.getElementById('llamaCppPath').value.trim();

@@ -54,17 +54,17 @@ public class AnthropicRouterHandler extends SimpleChannelInboundHandler<FullHttp
     		try {
 			// OpenAI API 端点
 			// 获取模型列表
-			if (uri.equals("/v1/models")) {
+			if (uri.startsWith("/v1/models")) {
 				this.anthropicService.handleModelsRequest(ctx, request);
 				return;
 			}
 			// Anthropic API 端点 (Messages)
-			if (uri.equals("/v1/messages")) {
+			if (uri.startsWith("/v1/messages")) {
 				this.anthropicService.handleMessagesRequest(ctx, request);
 				return;
 			}
 			// Anthropic API 端点 (Legacy Complete)
-			if (uri.equals("/v1/complete")) {
+			if (uri.startsWith("/v1/complete")) {
 				this.anthropicService.handleCompleteRequest(ctx, request);
 				return;
 			}

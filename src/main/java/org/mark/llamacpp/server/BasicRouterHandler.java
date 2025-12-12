@@ -53,7 +53,7 @@ import io.netty.util.CharsetUtil;
 public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 	
 	
-	private static final Logger logger = LoggerFactory.getLogger(OpenAIRouterHandler.class);
+	private static final Logger logger = LoggerFactory.getLogger(BasicRouterHandler.class);
 
 	private static final Gson gson = new Gson();
 	
