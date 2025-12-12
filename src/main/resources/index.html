@@ -639,6 +639,16 @@
             <div class="model-list-container">
                 <div class="model-list-header">
                     <h2>所有模型</h2>
+                    <div style="margin-left: auto;">
+                        <select id="modelSortSelect" class="form-control" style="padding: 4px 8px; width: auto; font-size: 0.875rem;" onchange="sortAndRenderModels()">
+                            <option value="name_asc">名称 (A-Z)</option>
+                            <option value="name_desc">名称 (Z-A)</option>
+                            <option value="size_asc">文件大小 (小到大)</option>
+                            <option value="size_desc">文件大小 (大到小)</option>
+                            <option value="params_asc">参数量 (小到大)</option>
+                            <option value="params_desc">参数量 (大到小)</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="modelsList">
                     <div class="loading-spinner">
@@ -1031,7 +1041,8 @@
                                         port: isLoaded && loadedModel ? loadedModel.port : null
                                     };
                                 });
-                                renderModelsList(modelsWithStatus);
+                                currentModelsData = modelsWithStatus;
+                                sortAndRenderModels();
                                 if (loadedData.success) {
                                     const loadedCount = (loadedData.models || []).length;
                                     const el = document.getElementById('loadedModelsCount');
@@ -1064,6 +1075,57 @@
                 if (archName.includes(key)) return icon;
             }
             return null;
+        }
+
+        let currentModelsData = [];
+
+        function getParamsCount(name) {
+            if (!name) return 0;
+            name = name.toUpperCase();
+            // Handle "8x7B" (MoE)
+            const moeMatch = name.match(/(\d+)X(\d+(?:\.\d+)?)B/);
+            if (moeMatch) {
+                return parseFloat(moeMatch[1]) * parseFloat(moeMatch[2]);
+            }
+            // Handle "7B"
+            const match = name.match(/(\d+(?:\.\d+)?)B/);
+            if (match) {
+                return parseFloat(match[1]);
+            }
+             // Handle "7M"
+            const matchM = name.match(/(\d+(?:\.\d+)?)M/);
+            if (matchM) {
+                return parseFloat(matchM[1]) / 1000;
+            }
+            return 0;
+        }
+
+        function sortAndRenderModels() {
+            const sortType = document.getElementById('modelSortSelect').value;
+            if (!currentModelsData) return;
+            
+            const models = [...currentModelsData]; // Copy
+            
+            models.sort((a, b) => {
+                const nameA = (a.alias || a.name || '').toLowerCase();
+                const nameB = (b.alias || b.name || '').toLowerCase();
+                const sizeA = a.size || 0;
+                const sizeB = b.size || 0;
+                const paramsA = getParamsCount(a.name);
+                const paramsB = getParamsCount(b.name);
+
+                switch (sortType) {
+                    case 'name_asc': return nameA.localeCompare(nameB);
+                    case 'name_desc': return nameB.localeCompare(nameA);
+                    case 'size_asc': return sizeA - sizeB;
+                    case 'size_desc': return sizeB - sizeA;
+                    case 'params_asc': return paramsA - paramsB;
+                    case 'params_desc': return paramsB - paramsA;
+                    default: return 0;
+                }
+            });
+            
+            renderModelsList(models);
         }
 
         function renderModelsList(models) {
@@ -1176,6 +1238,9 @@
         function loadModel(modelId, modelName) {
             document.getElementById('modelId').value = modelId;
             document.getElementById('modelName').value = modelName;
+            const hint = document.getElementById('ctxSizeVramHint');
+            if (hint) hint.textContent = '';
+            
             fetch(`/api/models/config?modelId=${encodeURIComponent(modelId)}`)
                 .then(r => r.json()).then(data => {
                     const config = (data.success && data.data) ? data.data.config : {};
