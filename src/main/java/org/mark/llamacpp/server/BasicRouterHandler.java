@@ -109,7 +109,8 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 		if (path.startsWith("/")) {
 			// path = path.substring(1);
 		}
-		URL url = LlamaServer.class.getResource(path);
+		URL url = LlamaServer.class.getResource("/web" + path);
+		
 		if (url == null) {
 			this.sendErrorResponse(ctx, HttpResponseStatus.NOT_FOUND, "文件不存在: " + path);
 			return;
