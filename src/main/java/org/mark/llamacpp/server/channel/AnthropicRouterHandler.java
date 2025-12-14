@@ -1,4 +1,4 @@
-package org.mark.llamacpp.server;
+package org.mark.llamacpp.server.channel;
 
 
 import org.mark.llamacpp.server.api.AnthropicService;

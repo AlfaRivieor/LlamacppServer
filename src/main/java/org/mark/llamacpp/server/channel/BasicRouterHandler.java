@@ -1,4 +1,4 @@
-package org.mark.llamacpp.server;
+package org.mark.llamacpp.server.channel;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -21,7 +21,12 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 import org.mark.llamacpp.gguf.GGUFMetaData;
+import org.mark.llamacpp.gguf.GGUFMetaDataReader;
 import org.mark.llamacpp.gguf.GGUFModel;
+import org.mark.llamacpp.server.ConfigManager;
+import org.mark.llamacpp.server.LlamaCppProcess;
+import org.mark.llamacpp.server.LlamaServer;
+import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.struct.ApiResponse;
 import org.mark.llamacpp.server.struct.LlamaCppConfig;
 import org.mark.llamacpp.server.struct.LoadModelRequest;
@@ -176,9 +181,16 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			this.handleStopModelRequest(ctx, request);
 			return;
 		}
-		// 获取模型启动配置API
-		if (uri.startsWith("/api/models/config")) {
+		if (uri.startsWith("/api/models/config/get")) {
 			this.handleModelConfigRequest(ctx, request);
+			return;
+		}
+		if (uri.startsWith("/api/models/details")) {
+			this.handleModelDetailsRequest(ctx, request);
+			return;
+		}
+		if (uri.startsWith("/api/models/config/set")) {
+			this.handleModelConfigSetRequest(ctx, request);
 			return;
 		}
 		// 停止服务API
@@ -635,41 +647,28 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 	 */
 	private void handleModelConfigRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
 		try {
-			// 只支持GET请求
 			if (request.method() != HttpMethod.GET) {
 				sendJsonResponse(ctx, ApiResponse.error("只支持GET请求"));
 				return;
 			}
-
-			// 从URL中获取模型ID参数
 			String query = request.uri();
 			String modelId = null;
-
-			// 解析URL参数，例如: /api/models/config?modelId=model-name
 			if (query.contains("?modelId=")) {
 				modelId = query.substring(query.indexOf("?modelId=") + 9);
-				// 如果还有其他参数，只取modelId部分
 				if (modelId.contains("&")) {
 					modelId = modelId.substring(0, modelId.indexOf("&"));
 				}
-				// URL解码
 				modelId = URLDecoder.decode(modelId, "UTF-8");
 			}
-
 			if (modelId == null || modelId.trim().isEmpty()) {
 				sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
 				return;
 			}
-
-			// 获取配置管理器实例并获取模型启动配置
 			ConfigManager configManager = ConfigManager.getInstance();
 			Map<String, Object> launchConfig = configManager.getLaunchConfig(modelId);
-
-			// 构建响应数据
 			Map<String, Object> data = new HashMap<>();
 			data.put("modelId", modelId);
 			data.put("config", launchConfig);
-
 			sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
 			logger.error("获取模型启动配置时发生错误", e);
@@ -677,6 +676,120 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 		}
 	}
 	
+	private void handleModelConfigSetRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
+		try {
+			if (request.method() != HttpMethod.POST) {
+				sendJsonResponse(ctx, ApiResponse.error("只支持POST请求"));
+				return;
+			}
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			if (content == null || content.trim().isEmpty()) {
+				sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+				return;
+			}
+			LoadModelRequest loadRequest = gson.fromJson(content, LoadModelRequest.class);
+			if (loadRequest == null || loadRequest.getModelId() == null || loadRequest.getModelId().trim().isEmpty()) {
+				sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+			ConfigManager configManager = ConfigManager.getInstance();
+			Map<String, Object> currentConfig = configManager.getLaunchConfig(loadRequest.getModelId());
+			if (currentConfig == null) {
+				currentConfig = new HashMap<>();
+			}
+			ModelLaunchOptions options = ModelLaunchOptions.fromLoadRequest(loadRequest);
+			Map<String, Object> updates = options.toConfigMap();
+			for (Map.Entry<String, Object> entry : updates.entrySet()) {
+				if (entry.getValue() != null) {
+					currentConfig.put(entry.getKey(), entry.getValue());
+				}
+			}
+			boolean saved = configManager.saveLaunchConfig(loadRequest.getModelId(), currentConfig);
+			if (!saved) {
+				sendJsonResponse(ctx, ApiResponse.error("保存模型启动配置失败"));
+				return;
+			}
+			Map<String, Object> data = new HashMap<>();
+			data.put("modelId", loadRequest.getModelId());
+			data.put("config", currentConfig);
+			sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.error("设置模型启动配置时发生错误", e);
+			sendJsonResponse(ctx, ApiResponse.error("设置模型启动配置失败: " + e.getMessage()));
+		}
+	}
+	
+	private void handleModelDetailsRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
+		try {
+			if (request.method() != HttpMethod.GET) {
+				sendJsonResponse(ctx, ApiResponse.error("只支持GET请求"));
+				return;
+			}
+			String query = request.uri();
+			String modelId = null;
+			if (query.contains("?modelId=")) {
+				modelId = query.substring(query.indexOf("?modelId=") + 9);
+				if (modelId.contains("&")) {
+					modelId = modelId.substring(0, modelId.indexOf("&"));
+				}
+				modelId = URLDecoder.decode(modelId, "UTF-8");
+			}
+			if (modelId == null || modelId.trim().isEmpty()) {
+				sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+			LlamaServerManager manager = LlamaServerManager.getInstance();
+			manager.listModel();
+			GGUFModel model = manager.findModelById(modelId);
+			if (model == null) {
+				sendJsonResponse(ctx, ApiResponse.error("未找到指定模型: " + modelId));
+				return;
+			}
+			Map<String, Object> metadata = new HashMap<>();
+			GGUFMetaData primary = model.getPrimaryModel();
+			if (primary != null) {
+				Map<String, Object> m = GGUFMetaDataReader.read(new File(primary.getFilePath()));
+				if (m != null) {
+					m.remove("tokenizer.ggml.merges");
+					m.remove("tokenizer.chat_template");
+					m.remove("tokenizer.ggml.token_type");
+					metadata.putAll(m);
+				}
+			}
+			GGUFMetaData mmproj = model.getMmproj();
+			if (mmproj != null) {
+				Map<String, Object> m2 = GGUFMetaDataReader.read(new File(mmproj.getFilePath()));
+				if (m2 != null) {
+					for (Map.Entry<String, Object> e : m2.entrySet()) {
+						metadata.put("mmproj." + e.getKey(), e.getValue());
+					}
+				}
+			}
+			boolean isLoaded = manager.getLoadedProcesses().containsKey(modelId);
+			String startCmd = isLoaded ? manager.getModelStartCmd(modelId) : null;
+			Integer port = manager.getModelPort(modelId);
+			Map<String, Object> modelMap = new HashMap<>();
+			String alias = model.getAlias();
+			modelMap.put("name", alias != null && !alias.isEmpty() ? alias : modelId);
+			modelMap.put("path", model.getPath());
+			modelMap.put("size", model.getSize());
+			modelMap.put("metadata", metadata);
+			modelMap.put("isLoaded", isLoaded);
+			if (startCmd != null && !startCmd.isEmpty()) {
+				modelMap.put("startCmd", startCmd);
+			}
+			if (port != null) {
+				modelMap.put("port", port);
+			}
+			Map<String, Object> response = new HashMap<>();
+			response.put("model", modelMap);
+			response.put("success", true);
+			sendJsonResponse(ctx, response);
+		} catch (Exception e) {
+			logger.error("获取模型详情时发生错误", e);
+			sendJsonResponse(ctx, ApiResponse.error("获取模型详情失败: " + e.getMessage()));
+		}
+	}
 	
 	/**
 	 * 	处理停止服务请求

@@ -39,6 +39,7 @@ public class LoadModelRequest {
     private Integer topK;
     private Double minP;
     private Double presencePenalty;
+    private Double repeatPenalty;
     private Boolean embedding;
     private Boolean reranking;
     private Boolean flashAttention;
@@ -114,6 +115,8 @@ public class LoadModelRequest {
     public void setMinP(Double minP) { this.minP = minP; }
     public Double getPresencePenalty() { return presencePenalty; }
     public void setPresencePenalty(Double presencePenalty) { this.presencePenalty = presencePenalty; }
+    public Double getRepeatPenalty() { return repeatPenalty; }
+    public void setRepeatPenalty(Double repeatPenalty) { this.repeatPenalty = repeatPenalty; }
     public Boolean getEmbedding() { return embedding; }
     public void setEmbedding(Boolean embedding) { this.embedding = embedding; }
     public Boolean getReranking() { return reranking; }
@@ -140,6 +143,7 @@ public class LoadModelRequest {
                 ", topK=" + topK +
                 ", minP=" + minP +
                 ", presencePenalty=" + presencePenalty +
+                ", repeatPenalty=" + repeatPenalty +
                 ", embedding=" + embedding +
                 ", reranking=" + reranking +
                 ", flashAttention=" + flashAttention +

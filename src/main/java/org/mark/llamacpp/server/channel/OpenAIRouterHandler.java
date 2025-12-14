@@ -1,4 +1,4 @@
-package org.mark.llamacpp.server;
+package org.mark.llamacpp.server.channel;
 
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;

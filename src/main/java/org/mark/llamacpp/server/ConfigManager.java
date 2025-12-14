@@ -177,6 +177,7 @@ public class ConfigManager {
         defaultConfig.put("topK", 40);
         defaultConfig.put("minP", 0.05);
         defaultConfig.put("presencePenalty", 0.0);
+        defaultConfig.put("repeatPenalty", 1.0);
         defaultConfig.put("embedding", false);
         defaultConfig.put("reranking", false);
         return defaultConfig;

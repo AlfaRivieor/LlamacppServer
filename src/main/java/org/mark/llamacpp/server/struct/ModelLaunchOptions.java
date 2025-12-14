@@ -19,6 +19,7 @@ public class ModelLaunchOptions {
     public Integer topK;
     public Double minP;
     public Double presencePenalty;
+    public Double repeatPenalty;
     public Boolean embedding;
     public Boolean reranking;
     public Boolean flashAttention;
@@ -38,6 +39,7 @@ public class ModelLaunchOptions {
         o.topK = r.getTopK();
         o.minP = r.getMinP();
         o.presencePenalty = r.getPresencePenalty();
+        o.repeatPenalty = r.getRepeatPenalty();
         o.embedding = r.getEmbedding();
         o.reranking = r.getReranking();
         o.flashAttention = r.getFlashAttention();
@@ -58,6 +60,7 @@ public class ModelLaunchOptions {
         m.put("topK", topK);
         m.put("minP", minP);
         m.put("presencePenalty", presencePenalty);
+        m.put("repeatPenalty", repeatPenalty);
         m.put("embedding", embedding != null ? embedding : false);
         m.put("reranking", reranking != null ? reranking : false);
         m.put("flashAttention", flashAttention != null ? flashAttention : true);
@@ -87,6 +90,7 @@ public class ModelLaunchOptions {
     	if (topK != null) { command.add("--top-k"); command.add(String.valueOf(topK)); }
     	if (minP != null) { command.add("--min-p"); command.add(String.valueOf(minP)); }
     	if (presencePenalty != null) { command.add("--presence-penalty"); command.add(String.valueOf(presencePenalty)); }
+    	if (repeatPenalty != null) { command.add("--repeat-penalty"); command.add(String.valueOf(repeatPenalty)); }
     	if (embedding != null && embedding) { command.add("--embedding"); }
     	if (reranking != null && reranking) { command.add("--reranking"); }
     	if (host != null && !host.isEmpty()) { command.add("--host " + host); }

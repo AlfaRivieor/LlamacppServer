@@ -384,6 +384,17 @@ public class LlamaServerManager {
 	}
 	
 	/**
+	 * 	获取指定模型的启动参数。
+	 * @param modelId
+	 * @return
+	 */
+	public String getModelStartCmd(String modelId) {
+		LlamaCppProcess process = this.loadedProcesses.get(modelId);
+		if(process == null) return "";
+		return process.getCmd();
+	}
+	
+	/**
 	 * 获取模型对应的端口
 	 * @param modelId 模型ID
 	 * @return 端口号，如果模型未加载则返回null
