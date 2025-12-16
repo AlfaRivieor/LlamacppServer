@@ -19,8 +19,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -32,7 +30,6 @@ import org.mark.llamacpp.server.ConfigManager;
 import org.mark.llamacpp.server.LlamaCppProcess;
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.LlamaServerManager;
-import org.mark.llamacpp.server.api.SessionService;
 import org.mark.llamacpp.server.struct.ApiResponse;
 import org.mark.llamacpp.server.struct.LlamaCppConfig;
 import org.mark.llamacpp.server.struct.LoadModelRequest;
@@ -76,9 +73,6 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 
 	private static final Gson gson = new Gson();
 
-	
-	private SessionService sessionService = new SessionService();
-	
 	
 	public BasicRouterHandler() {
 		
@@ -229,7 +223,7 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			return;
 		}
 		
-		
+		/*
 		// 会话相关
 		if (uri.startsWith("/api/chat/sessions/create")) {
 			ApiResponse response = this.sessionService.handleChatSessionCreate(ctx, request);
@@ -239,7 +233,7 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			this.sessionService.handleChatSessionList(ctx, request);
 			return;
 		}
-		
+		*/
 		
 		// 停止服务API
 		if (uri.startsWith("/api/shutdown")) {

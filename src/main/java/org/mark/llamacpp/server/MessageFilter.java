@@ -52,6 +52,7 @@ public class MessageFilter {
 	 * @return
 	 */
 	public static String filter(ChannelHandlerContext ctx, String modelId, JsonObject requestJson) {
+		
 		// 转成数组
 		JsonElement messages = requestJson.get("messages");
 		JsonArray originalArray = messages.getAsJsonArray();
@@ -75,7 +76,12 @@ public class MessageFilter {
 				// 安全地获取 "content" 字段
 				if (jsonObject.has("content") && !jsonObject.get("content").isJsonNull()) {
 					//
-					String content = jsonObject.get("content").getAsString();
+					JsonElement jsonContent = jsonObject.get("content");
+					if(!jsonContent.isJsonObject()) {
+						filteredArray.add(jsonObject);
+						continue;
+					}
+					String content = jsonContent.getAsString();
 
 					// 判断是否需要保留（不包含要移除的关键字）
 					boolean shouldRemove = content.startsWith(LlamaServer.SLOTS_SAVE_KEYWORD)
@@ -87,9 +93,7 @@ public class MessageFilter {
 
 					if (size - 1 == n) {
 						// 出现了，是特殊处理！
-						// TODO
 						if(content.startsWith(LlamaServer.SLOTS_SAVE_KEYWORD)) {
-							
 							save(modelId, ctx, isStream);
 							return null;
 						}

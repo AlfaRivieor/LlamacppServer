@@ -23,7 +23,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import io.netty.buffer.ByteBuf;
@@ -302,8 +301,6 @@ public class OpenAIService {
 				return;
 			}
 			
-			// 检查输入的内容是否包含特殊字符
-			System.out.println("1111111111111111111111111111111111111111111111111111" + requestJson.get("messages"));
 			// 获取模型端口
 			Integer modelPort = manager.getModelPort(modelName);
 			if (modelPort == null) {
@@ -372,8 +369,6 @@ public class OpenAIService {
 		for (Map.Entry<String, String> entry : request.headers()) {
 			headers.put(entry.getKey(), entry.getValue());
 		}
-		
-		System.err.println("发送消息：" + requestBody);
 		
 		try {
 			// 使用retain()增加引用计数，确保在异步任务中可以安全访问
