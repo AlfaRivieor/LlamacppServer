@@ -35,6 +35,13 @@ public class OpenAIRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 	@Override
 	protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
 		String uri = request.uri();
+		
+		// 处理CORS预检请求
+		if (request.method() == HttpMethod.OPTIONS) {
+			this.handleCorsPreflight(ctx, request);
+			return;
+		}
+		
 		this.handleApiRequest(ctx, request, uri);
 		return;
 	}
@@ -70,19 +77,41 @@ public class OpenAIRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
             this.sendJsonResponse(ctx, ApiResponse.error("服务器内部错误"));
         }
     }
+    
+    /**
+     * 处理CORS预检请求
+     */
+    private void handleCorsPreflight(ChannelHandlerContext ctx, FullHttpRequest request) {
+        FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
+        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization");
+        response.headers().set(HttpHeaderNames.CONTENT_LENGTH, 0);
+        
+        ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture future) {
+                ctx.close();
+            }
+        });
+    }
 
-	/**
-	 * 	
-	 * @param ctx
-	 * @param data
-	 */
-	private void sendJsonResponse(ChannelHandlerContext ctx, Object data) {
+ /**
+  *
+  * @param ctx
+  * @param data
+  */
+ private void sendJsonResponse(ChannelHandlerContext ctx, Object data) {
 		String json = gson.toJson(data);
 		byte[] content = json.getBytes(CharsetUtil.UTF_8);
 
 		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
 		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
 		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
+		// 添加CORS头
+		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
+		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization");
 		response.content().writeBytes(content);
 
 		ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {

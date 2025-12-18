@@ -13,6 +13,7 @@ import java.util.Map;
 
 import org.mark.llamacpp.server.channel.AnthropicRouterHandler;
 import org.mark.llamacpp.server.channel.BasicRouterHandler;
+import org.mark.llamacpp.server.channel.CompletionRouterHandler;
 import org.mark.llamacpp.server.channel.OpenAIRouterHandler;
 import org.mark.llamacpp.server.io.ConsoleBroadcastOutputStream;
 import org.mark.llamacpp.server.struct.LlamaCppConfig;
@@ -129,6 +130,7 @@ public class LlamaServer {
                                     .addLast(new HttpObjectAggregator(Integer.MAX_VALUE)) // 最大！
                                     .addLast(new ChunkedWriteHandler())
                                     .addLast(new BasicRouterHandler())
+                                    .addLast(new CompletionRouterHandler())
                                     .addLast(new AnthropicRouterHandler());
                         }
                         
@@ -176,6 +178,7 @@ public class LlamaServer {
                                     .addLast(new WebSocketServerProtocolHandler(WEBSOCKET_PATH, null, true, Integer.MAX_VALUE))
                                     .addLast(new WebSocketServerHandler())
                                     .addLast(new BasicRouterHandler())
+                                    .addLast(new CompletionRouterHandler())
                                     .addLast(new OpenAIRouterHandler());
                         }
                         @Override
