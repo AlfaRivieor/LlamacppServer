@@ -757,7 +757,7 @@
       </div>
     </div>
   </div>
-
+  <script src="/js/lz-string.js"></script>
   <script>
     // 会话抽屉相关元素
     const els = {
@@ -845,6 +845,40 @@
         throw new Error(message);
       }
       return json;
+    }
+    
+  //========================================================================================================================================
+  // 压缩/解压 JSON 字符串
+
+    const LZ_PREFIX = 'lz:';
+    
+    function lzCompressIfNeeded(text) {
+      if (text == null) return text;
+      const s = String(text);
+      if (!s) return s;
+      if (s.startsWith(LZ_PREFIX)) return s;
+      if (s.length < 256) return s;
+      try {
+        const compressed = window.LZString?.compressToEncodedURIComponent ? window.LZString.compressToEncodedURIComponent(s) : null;
+        if (!compressed) return s;
+        return LZ_PREFIX + compressed;
+      } catch (e) {
+        return s;
+      }
+    }
+    
+    function lzDecompressIfNeeded(text) {
+      if (text == null) return text;
+      const s = String(text);
+      if (!s) return s;
+      if (!s.startsWith(LZ_PREFIX)) return s;
+      const payload = s.slice(LZ_PREFIX.length);
+      try {
+        const out = window.LZString?.decompressFromEncodedURIComponent ? window.LZString.decompressFromEncodedURIComponent(payload) : null;
+        return out == null ? s : out;
+      } catch (e) {
+        return s;
+      }
     }
 
     function formatTime(ts) {
@@ -995,7 +1029,9 @@
       rerenderAll();
       scheduleSave('删除气泡');
     }
-
+	
+    
+    // 渲染聊天气泡
     function renderMessage(msg) {
       const wrap = document.createElement('div');
       wrap.className = 'msg ' + msg.role;
@@ -1012,8 +1048,9 @@
       meta.className = 'meta';
       const left = document.createElement('div');
       const taskName = getCurrentCompletionTitle();
-      const roleLabel = msg.role === 'user' ? '用户' : (msg.role === 'assistant' ? '助手' : '系统');
-      left.textContent = roleLabel + ' · ' + taskName;
+      const userName = getUserSpeakerName();
+      // 只显示名字
+      left.textContent = msg.role === 'user' ? userName : (msg.role === 'assistant' ? taskName : '系统');
 
       const right = document.createElement('div');
       right.className = 'meta-right';
@@ -1259,10 +1296,11 @@
       }
     }
 
+    // 这个功能不再使用
     function scheduleSave(reason) {
-      if (!state.currentCompletionId) return;
-      if (state.saveTimer) clearTimeout(state.saveTimer);
-      state.saveTimer = setTimeout(() => saveCompletion(reason).catch(() => {}), 450);
+      //if (!state.currentCompletionId) return;
+      //if (state.saveTimer) clearTimeout(state.saveTimer);
+      //state.saveTimer = setTimeout(() => saveCompletion(reason).catch(() => {}), 450);
     }
 
     function buildParamsJson() {
@@ -1283,9 +1321,9 @@
       const payload = {
         id: Number(state.currentCompletionId),
         title: els.titleInput.value || '',
-        prompt: els.rolePrompt.value || '',
-        systemPrompt: els.systemPrompt.value || '',
-        paramsJson: buildParamsJson(),
+        prompt: lzCompressIfNeeded(els.rolePrompt.value || ''),
+        systemPrompt: lzCompressIfNeeded(els.systemPrompt.value || ''),
+        paramsJson: lzCompressIfNeeded(buildParamsJson()),
         createdAt: Number(state.currentCreatedAt || 0),
         updatedAt: Date.now()
       };
@@ -1369,7 +1407,6 @@
     }
 
     async function loadCompletions(ensureCurrent) {
-      if (state.isLoadingCompletions) return;
       setCompletionsLoading(true);
       try {
         const data = await fetchJson('/api/chat/completion/list', { method: 'GET' });
@@ -1484,12 +1521,13 @@
       const data = await fetchJson('/api/chat/completion/get?name=' + encodeURIComponent(id), { method: 'GET' });
       const s = data?.data || {};
       els.titleInput.value = s.title || '';
-      els.systemPrompt.value = s.systemPrompt || '';
-      els.rolePrompt.value = s.prompt || '';
+      els.systemPrompt.value = lzDecompressIfNeeded(s.systemPrompt || '');
+      els.rolePrompt.value = lzDecompressIfNeeded(s.prompt || '');
       state.currentCreatedAt = Number(s.createdAt || 0);
 
       let ext = {};
-      try { ext = s.paramsJson ? JSON.parse(s.paramsJson) : {}; } catch (e) { ext = {}; }
+      const paramsJsonText = lzDecompressIfNeeded(s.paramsJson || '');
+      try { ext = paramsJsonText ? JSON.parse(paramsJsonText) : {}; } catch (e) { ext = {}; }
       if (ext?.model) els.modelSelect.value = ext.model;
       els.userName.value = (ext?.userName == null ? '' : String(ext.userName));
       els.userPrefix.value = (ext?.userPrefix == null ? '' : String(ext.userPrefix));
@@ -1628,6 +1666,7 @@
       });
     }
 
+    // 啓動后就執行初始化
     async function init() {
       bindEvents();
       await loadModels();

@@ -1,6 +1,7 @@
 package org.mark.llamacpp.server.channel;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +34,8 @@ public class CompletionRouterHandler extends SimpleChannelInboundHandler<FullHtt
 	 * 	
 	 */
 	private static final Gson gson = new Gson();
+
+	private static final String LZ_PREFIX = "lz:";
 	
 	/**
 	 * 	
@@ -133,8 +136,19 @@ public class CompletionRouterHandler extends SimpleChannelInboundHandler<FullHtt
 	private void handleCharactorList(ChannelHandlerContext ctx) {
 		List<CharactorDataStruct> list = this.completionService.listCharactor();
 		
+		List<Map<String, Object>> slim = new ArrayList<>();
+		for (CharactorDataStruct s : list) {
+			if (s == null) continue;
+			Map<String, Object> item = new HashMap<>();
+			item.put("id", s.getId());
+			item.put("title", s.getTitle());
+			item.put("createdAt", s.getCreatedAt());
+			item.put("updatedAt", s.getUpdatedAt());
+			slim.add(item);
+		}
+		
 		Map<String, Object> response = new HashMap<String, Object>();
-		response.put("data", list);
+		response.put("data", slim);
 		response.put("success", true);
 		
 		CompletionRouterHandler.sendJson(ctx, response, HttpResponseStatus.OK);
@@ -150,7 +164,7 @@ public class CompletionRouterHandler extends SimpleChannelInboundHandler<FullHtt
 		try {
 			JsonObject json = gson.fromJson(body, JsonObject.class);
 			if (json != null && json.has("title")) {
-				String title = json.get("title").getAsString();
+				String title = maybeDecompress(json.get("title").getAsString());
 				if (title != null && !title.trim().isEmpty()) {
 					created.setTitle(title.trim());
 					created.setUpdatedAt(System.currentTimeMillis());
@@ -183,6 +197,10 @@ public class CompletionRouterHandler extends SimpleChannelInboundHandler<FullHtt
 			return;
 		}
 		// 
+		charactorDataStruct.setPrompt(maybeCompress(charactorDataStruct.getPrompt()));
+		charactorDataStruct.setSystemPrompt(maybeCompress(charactorDataStruct.getSystemPrompt()));
+		charactorDataStruct.setParamsJson(maybeCompress(charactorDataStruct.getParamsJson()));
+		
 		response.put("success", true);
 		response.put("message", "success");
 		response.put("data", charactorDataStruct);
@@ -200,6 +218,12 @@ public class CompletionRouterHandler extends SimpleChannelInboundHandler<FullHtt
 		Map<String, Object> response = new HashMap<String, Object>();
 		try {
 			CharactorDataStruct charactorDataStruct = gson.fromJson(body, CharactorDataStruct.class);
+			if (charactorDataStruct != null) {
+				charactorDataStruct.setTitle(maybeDecompress(charactorDataStruct.getTitle()));
+				charactorDataStruct.setPrompt(maybeDecompress(charactorDataStruct.getPrompt()));
+				charactorDataStruct.setSystemPrompt(maybeDecompress(charactorDataStruct.getSystemPrompt()));
+				charactorDataStruct.setParamsJson(maybeDecompress(charactorDataStruct.getParamsJson()));
+			}
 			try {
 				Long id = name == null ? null : Long.parseLong(name.trim());
 				if (id != null && id.longValue() > 0) {
@@ -291,5 +315,390 @@ public class CompletionRouterHandler extends SimpleChannelInboundHandler<FullHtt
 		payload.put("status", "error");
 		payload.put("message", message);
 		sendJson(ctx, payload, status);
+	}
+	
+	private static String maybeCompress(String s) {
+		if (s == null || s.isEmpty()) return s;
+		if (s.startsWith(LZ_PREFIX)) return s;
+		if (s.length() < 256) return s;
+		try {
+			String c = LzString.compressToEncodedURIComponent(s);
+			if (c == null || c.isEmpty()) return s;
+			return LZ_PREFIX + c;
+		} catch (Exception e) {
+			return s;
+		}
+	}
+	
+	private static String maybeDecompress(String s) {
+		if (s == null || s.isEmpty()) return s;
+		if (!s.startsWith(LZ_PREFIX)) return s;
+		String payload = s.substring(LZ_PREFIX.length());
+		try {
+			String out = LzString.decompressFromEncodedURIComponent(payload);
+			return out == null ? s : out;
+		} catch (Exception e) {
+			return s;
+		}
+	}
+	
+	private static final class LzString {
+		private static final String KEY_STR_URI_SAFE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$";
+		
+		private interface IntToChar {
+			char apply(int value);
+		}
+		
+		private interface IntToInt {
+			int apply(int index);
+		}
+		
+		private static final Map<Character, Integer> URI_SAFE_REVERSE = buildReverseMap(KEY_STR_URI_SAFE);
+		
+		private static Map<Character, Integer> buildReverseMap(String alphabet) {
+			Map<Character, Integer> map = new HashMap<>();
+			for (int i = 0; i < alphabet.length(); i++) {
+				map.put(alphabet.charAt(i), i);
+			}
+			return map;
+		}
+		
+		private static int getBaseValue(Map<Character, Integer> reverseMap, char c) {
+			Integer v = reverseMap.get(c);
+			return v == null ? -1 : v.intValue();
+		}
+		
+		static String compressToEncodedURIComponent(String input) {
+			if (input == null) return "";
+			if (input.isEmpty()) return "";
+			return _compress(input, 6, new IntToChar() {
+				@Override
+				public char apply(int value) {
+					return KEY_STR_URI_SAFE.charAt(value);
+				}
+			});
+		}
+		
+		static String decompressFromEncodedURIComponent(String input) {
+			if (input == null) return "";
+			if (input.isEmpty()) return null;
+			String cleaned = input.replace(" ", "+");
+			return _decompress(cleaned.length(), 32, new IntToInt() {
+				@Override
+				public int apply(int index) {
+					char ch = cleaned.charAt(index);
+					return getBaseValue(URI_SAFE_REVERSE, ch);
+				}
+			});
+		}
+		
+		private static String _compress(String uncompressed, int bitsPerChar, IntToChar getCharFromInt) {
+			if (uncompressed == null) return "";
+			
+			Map<String, Integer> dictionary = new HashMap<>();
+			Map<String, Boolean> dictionaryToCreate = new HashMap<>();
+			String w = "";
+			int dictSize = 3;
+			int numBits = 2;
+			int enlargeIn = 2;
+			
+			StringBuilder data = new StringBuilder();
+			int dataVal = 0;
+			int dataPosition = 0;
+			
+			for (int i = 0; i < uncompressed.length(); i++) {
+				String c = String.valueOf(uncompressed.charAt(i));
+				if (!dictionary.containsKey(c)) {
+					dictionary.put(c, dictSize++);
+					dictionaryToCreate.put(c, Boolean.TRUE);
+				}
+				
+				String wc = w + c;
+				if (dictionary.containsKey(wc)) {
+					w = wc;
+				} else {
+					if (dictionaryToCreate.containsKey(w)) {
+						int chCode = w.charAt(0);
+						if (chCode < 256) {
+							for (int j = 0; j < numBits; j++) {
+								dataVal = (dataVal << 1);
+								if (dataPosition == bitsPerChar - 1) {
+									dataPosition = 0;
+									data.append(getCharFromInt.apply(dataVal));
+									dataVal = 0;
+								} else {
+									dataPosition++;
+								}
+							}
+							int value = chCode;
+							for (int j = 0; j < 8; j++) {
+								dataVal = (dataVal << 1) | (value & 1);
+								if (dataPosition == bitsPerChar - 1) {
+									dataPosition = 0;
+									data.append(getCharFromInt.apply(dataVal));
+									dataVal = 0;
+								} else {
+									dataPosition++;
+								}
+								value >>= 1;
+							}
+						} else {
+							int value = 1;
+							for (int j = 0; j < numBits; j++) {
+								dataVal = (dataVal << 1) | (value & 1);
+								if (dataPosition == bitsPerChar - 1) {
+									dataPosition = 0;
+									data.append(getCharFromInt.apply(dataVal));
+									dataVal = 0;
+								} else {
+									dataPosition++;
+								}
+								value >>= 1;
+							}
+							value = chCode;
+							for (int j = 0; j < 16; j++) {
+								dataVal = (dataVal << 1) | (value & 1);
+								if (dataPosition == bitsPerChar - 1) {
+									dataPosition = 0;
+									data.append(getCharFromInt.apply(dataVal));
+									dataVal = 0;
+								} else {
+									dataPosition++;
+								}
+								value >>= 1;
+							}
+						}
+						enlargeIn--;
+						if (enlargeIn == 0) {
+							enlargeIn = 1 << numBits;
+							numBits++;
+						}
+						dictionaryToCreate.remove(w);
+					} else {
+						int value = dictionary.get(w);
+						for (int j = 0; j < numBits; j++) {
+							dataVal = (dataVal << 1) | (value & 1);
+							if (dataPosition == bitsPerChar - 1) {
+								dataPosition = 0;
+								data.append(getCharFromInt.apply(dataVal));
+								dataVal = 0;
+							} else {
+								dataPosition++;
+							}
+							value >>= 1;
+						}
+					}
+					
+					enlargeIn--;
+					if (enlargeIn == 0) {
+						enlargeIn = 1 << numBits;
+						numBits++;
+					}
+					
+					dictionary.put(wc, dictSize++);
+					w = c;
+				}
+			}
+			
+			if (!w.isEmpty()) {
+				if (dictionaryToCreate.containsKey(w)) {
+					int chCode = w.charAt(0);
+					if (chCode < 256) {
+						for (int j = 0; j < numBits; j++) {
+							dataVal = (dataVal << 1);
+							if (dataPosition == bitsPerChar - 1) {
+								dataPosition = 0;
+								data.append(getCharFromInt.apply(dataVal));
+								dataVal = 0;
+							} else {
+								dataPosition++;
+							}
+						}
+						int value = chCode;
+						for (int j = 0; j < 8; j++) {
+							dataVal = (dataVal << 1) | (value & 1);
+							if (dataPosition == bitsPerChar - 1) {
+								dataPosition = 0;
+								data.append(getCharFromInt.apply(dataVal));
+								dataVal = 0;
+							} else {
+								dataPosition++;
+							}
+							value >>= 1;
+						}
+					} else {
+						int value = 1;
+						for (int j = 0; j < numBits; j++) {
+							dataVal = (dataVal << 1) | (value & 1);
+							if (dataPosition == bitsPerChar - 1) {
+								dataPosition = 0;
+								data.append(getCharFromInt.apply(dataVal));
+								dataVal = 0;
+							} else {
+								dataPosition++;
+							}
+							value >>= 1;
+						}
+						value = chCode;
+						for (int j = 0; j < 16; j++) {
+							dataVal = (dataVal << 1) | (value & 1);
+							if (dataPosition == bitsPerChar - 1) {
+								dataPosition = 0;
+								data.append(getCharFromInt.apply(dataVal));
+								dataVal = 0;
+							} else {
+								dataPosition++;
+							}
+							value >>= 1;
+						}
+					}
+					enlargeIn--;
+					if (enlargeIn == 0) {
+						enlargeIn = 1 << numBits;
+						numBits++;
+					}
+					dictionaryToCreate.remove(w);
+				} else {
+					int value = dictionary.get(w);
+					for (int j = 0; j < numBits; j++) {
+						dataVal = (dataVal << 1) | (value & 1);
+						if (dataPosition == bitsPerChar - 1) {
+							dataPosition = 0;
+							data.append(getCharFromInt.apply(dataVal));
+							dataVal = 0;
+						} else {
+							dataPosition++;
+						}
+						value >>= 1;
+					}
+				}
+				
+				enlargeIn--;
+				if (enlargeIn == 0) {
+					enlargeIn = 1 << numBits;
+					numBits++;
+				}
+			}
+			
+			int value = 2;
+			for (int j = 0; j < numBits; j++) {
+				dataVal = (dataVal << 1) | (value & 1);
+				if (dataPosition == bitsPerChar - 1) {
+					dataPosition = 0;
+					data.append(getCharFromInt.apply(dataVal));
+					dataVal = 0;
+				} else {
+					dataPosition++;
+				}
+				value >>= 1;
+			}
+			
+			while (true) {
+				dataVal = (dataVal << 1);
+				if (dataPosition == bitsPerChar - 1) {
+					data.append(getCharFromInt.apply(dataVal));
+					break;
+				}
+				dataPosition++;
+			}
+			
+			return data.toString();
+		}
+		
+		private static final class DecompressData {
+			int val;
+			int position;
+			int index;
+		}
+		
+		private static int readBits(DecompressData data, int n, int resetValue, IntToInt getNextValue) {
+			int bits = 0;
+			int maxpower = 1 << n;
+			int power = 1;
+			while (power != maxpower) {
+				int resb = data.val & data.position;
+				data.position >>= 1;
+				if (data.position == 0) {
+					data.position = resetValue;
+					data.val = getNextValue.apply(data.index++);
+				}
+				if (resb > 0) bits |= power;
+				power <<= 1;
+			}
+			return bits;
+		}
+		
+		private static String _decompress(int length, int resetValue, IntToInt getNextValue) {
+			List<String> dictionary = new ArrayList<>();
+			for (int i = 0; i < 3; i++) dictionary.add(String.valueOf((char) i));
+			
+			DecompressData data = new DecompressData();
+			data.val = getNextValue.apply(0);
+			data.position = resetValue;
+			data.index = 1;
+			
+			int next = readBits(data, 2, resetValue, getNextValue);
+			String c;
+			if (next == 0) {
+				c = String.valueOf((char) readBits(data, 8, resetValue, getNextValue));
+			} else if (next == 1) {
+				c = String.valueOf((char) readBits(data, 16, resetValue, getNextValue));
+			} else if (next == 2) {
+				return "";
+			} else {
+				return null;
+			}
+			
+			dictionary.add(c);
+			int dictSize = 4;
+			String w = c;
+			StringBuilder result = new StringBuilder(c);
+			int enlargeIn = 4;
+			int numBits = 3;
+			
+			while (true) {
+				if (data.index > length) return "";
+				int cc = readBits(data, numBits, resetValue, getNextValue);
+				String entry;
+				
+				if (cc == 0) {
+					String ch = String.valueOf((char) readBits(data, 8, resetValue, getNextValue));
+					dictionary.add(ch);
+					cc = dictSize++;
+					enlargeIn--;
+				} else if (cc == 1) {
+					String ch = String.valueOf((char) readBits(data, 16, resetValue, getNextValue));
+					dictionary.add(ch);
+					cc = dictSize++;
+					enlargeIn--;
+				} else if (cc == 2) {
+					return result.toString();
+				}
+				
+				if (enlargeIn == 0) {
+					enlargeIn = 1 << numBits;
+					numBits++;
+				}
+				
+				if (cc < dictionary.size() && dictionary.get(cc) != null) {
+					entry = dictionary.get(cc);
+				} else if (cc == dictSize) {
+					entry = w + w.charAt(0);
+				} else {
+					return null;
+				}
+				
+				result.append(entry);
+				dictionary.add(w + entry.charAt(0));
+				dictSize++;
+				enlargeIn--;
+				w = entry;
+				
+				if (enlargeIn == 0) {
+					enlargeIn = 1 << numBits;
+					numBits++;
+				}
+			}
+		}
 	}
 }
