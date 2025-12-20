@@ -819,8 +819,6 @@
                                 ${download.fileName || '未知文件'}
                             </div>
                             <div class="download-meta">
-                                <span><i class="fas fa-link"></i> ${download.url}</span>
-                                <span><i class="fas fa-folder"></i> ${download.targetPath}</span>
                                 ${download.totalBytes ? `<span><i class="fas fa-hdd"></i> ${formatFileSize(download.totalBytes)}</span>` : ''}
                             </div>
                             ${status === 'DOWNLOADING' ? `
