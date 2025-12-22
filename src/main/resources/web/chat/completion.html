@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Completion 创作助手</title>
+  <title>Easy Chat</title>
   <style>
     :root{
       --bg: #0b0f14;
@@ -1589,7 +1589,9 @@
     async function createCompletion() {
       setCompletionsLoading(true);
       try {
-        const seedTitle = (els.titleInput.value || '').trim().slice(0, 60);
+        //const seedTitle = (els.titleInput.value || '').trim().slice(0, 60);
+        // 改用默认的名字
+        const seedTitle = '默认角色-' + Date.now();
         const data = await fetchJson('/api/chat/completion/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
