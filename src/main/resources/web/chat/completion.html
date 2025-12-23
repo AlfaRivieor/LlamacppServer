@@ -1266,13 +1266,19 @@
         if (role !== 'system' && role !== 'user' && role !== 'assistant') continue;
         const raw = (m?.content == null ? '' : String(m.content));
         if (role === 'system') {
-          out.push({ role: 'system', content: assistantPrefix });
           out.push({ role: 'system', content: raw });
-          out.push({ role: 'system', content: assistantSuffix });
         } else if (role === 'user') {
-          out.push({ role: 'user', content: userPrefix });
+          if(userPrefix != null && userPrefix.length != 0)
+            out.push({ role: 'user', content: userPrefix });
           out.push({ role: 'user', content: raw});
-          out.push({ role: 'user', content: userSuffix });
+          if(userSuffix != null && userSuffix.length != 0)
+            out.push({ role: 'user', content: userSuffix });
+        } else if (role === 'assistant') {
+          if(assistantPrefix != null && assistantPrefix.length != 0)
+            out.push({ role: 'assistant', content: assistantPrefix });
+          out.push({ role: 'assistant', content: raw });
+          if(assistantSuffix != null && assistantSuffix.length != 0)
+            out.push({ role: 'assistant', content: assistantSuffix });
         }
       }
 
