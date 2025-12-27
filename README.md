@@ -38,6 +38,8 @@
 - **系统设置**：配置模型目录和 llama.cpp 可执行文件路径
 
 <img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/6f278c8f-b966-462d-af22-9e12b5f2badc" />
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/6a836969-8b38-4e41-8685-c41c712d0614" />
+
 <img width="2880" height="1800" alt="3d666159-cf7d-41c0-8752-bd297e1cfa42" src="https://github.com/user-attachments/assets/905676ef-60f3-4501-bdbe-fad84b9eb91e" />
 
 ### 🔌 API 兼容性
@@ -52,7 +54,8 @@
 - **结果对比**：保存和对比多次测试结果，分析性能差异
 - **测试结果管理**：查看、追加、删除测试结果文件
 
-<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/1ac222b9-329b-4305-826f-0fcfe9a7fb4e" />
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/7664172e-0104-4f68-8725-47dbba738de5" />
+
 
 
 ### 📊 系统监控
@@ -61,7 +64,10 @@
 - **日志广播**：控制台日志实时广播到 Web 界面
 - **进程管理**：监控模型进程的运行状态和端口分配
 
-![Uploading image.png…]()
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/1ac222b9-329b-4305-826f-0fcfe9a7fb4e" />
+
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/adbc91b9-24f7-4e98-9ab8-11b9ebd09dd3" />
+
 
 
 ### ⚙️ 配置管理
