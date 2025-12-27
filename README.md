@@ -82,7 +82,7 @@
 
 ## 使用说明
 
-### 启动程序
+### 编译程序
 
 ```bash
 # Windows
@@ -91,6 +91,8 @@ javac-win.bat
 # Linux
 javac-linux.sh
 ```
+### 启动程序
+编译成功后，在build目录下找到启动脚本：run.sh或者run.bat，运行即可。
 
 ### 访问 Web 界面
 
