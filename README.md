@@ -17,12 +17,16 @@
 - **分卷模型支持**：自动识别和处理分卷模型文件（如 `*-00001-of-*.gguf`）
 - **多模态模型支持**：支持带视觉组件的模型（mmproj 文件）
 
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/d6c27d2e-c7b2-40ac-ba0d-5e55342471bc" />
+
 ### 🌐 模型下载（开发中，未完全实现）
 
 - **断点续传**：支持断点续传功能，网络中断后可继续下载
 - **并发下载**：最多支持 4 个任务同时下载，其余任务进入等待队列
 - **进度监控**：通过 WebSocket 实时推送下载进度
 - **任务管理**：支持任务的暂停、恢复、删除和状态持久化
+- 
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/ab8cf9b6-93b6-4faa-98c6-3ff65d32b603" />
 
 ### 🖥️ Web 管理界面
 
@@ -32,6 +36,11 @@
 - **下载管理**：管理下载任务，查看进度和状态
 - **控制台日志**：实时查看系统日志，支持自动刷新
 - **系统设置**：配置模型目录和 llama.cpp 可执行文件路径
+
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/6f278c8f-b966-462d-af22-9e12b5f2badc" />
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/6a836969-8b38-4e41-8685-c41c712d0614" />
+
+<img width="2880" height="1800" alt="3d666159-cf7d-41c0-8752-bd297e1cfa42" src="https://github.com/user-attachments/assets/905676ef-60f3-4501-bdbe-fad84b9eb91e" />
 
 ### 🔌 API 兼容性
 
@@ -45,11 +54,21 @@
 - **结果对比**：保存和对比多次测试结果，分析性能差异
 - **测试结果管理**：查看、追加、删除测试结果文件
 
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/7664172e-0104-4f68-8725-47dbba738de5" />
+
+
+
 ### 📊 系统监控
 
 - **实时状态**：通过 WebSocket 实时推送模型加载/停止事件
 - **日志广播**：控制台日志实时广播到 Web 界面
 - **进程管理**：监控模型进程的运行状态和端口分配
+
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/1ac222b9-329b-4305-826f-0fcfe9a7fb4e" />
+
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/adbc91b9-24f7-4e98-9ab8-11b9ebd09dd3" />
+
+
 
 ### ⚙️ 配置管理
 
@@ -58,7 +77,7 @@
 - **多目录支持**：支持配置多个模型目录，自动合并检索
 - **配置持久化**：所有配置自动保存到本地文件
 
-### 🔧 高级功能
+### 🔧 其它功能
 
 - **显存估算**：根据上下文大小、批处理等参数估算所需的显存占用（对于视觉模型不准确）
 - **KV 缓存管理**：可使用llama.cpp的KV保存本地功能
@@ -69,7 +88,7 @@
 
 ## 使用说明
 
-### 启动程序
+### 编译程序
 
 ```bash
 # Windows
@@ -78,6 +97,8 @@ javac-win.bat
 # Linux
 javac-linux.sh
 ```
+### 启动程序
+编译成功后，在build目录下找到启动脚本：run.sh或者run.bat，运行即可。
 
 ### 访问 Web 界面
 
