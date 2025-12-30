@@ -159,6 +159,7 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			this.handleSetModelAliasRequest(ctx, request);
 			return;
 		}
+		// 偏好模型
 		if (uri.startsWith("/api/models/favourite")) {
 			this.handleModelFavouriteRequest(ctx, request);
 			return;
@@ -221,19 +222,6 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			this.handleDeviceListRequest(ctx, request);
 			return;
 		}
-		
-		/*
-		// 会话相关
-		if (uri.startsWith("/api/chat/sessions/create")) {
-			ApiResponse response = this.sessionService.handleChatSessionCreate(ctx, request);
-			return;
-		}
-		if (uri.startsWith("/api/chat/sessions/list")) {
-			this.sessionService.handleChatSessionList(ctx, request);
-			return;
-		}
-		*/
-		
 		// 停止服务API
 		if (uri.startsWith("/api/shutdown")) {
 			this.handleShutdownRequest(ctx, request);
@@ -570,9 +558,10 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 		}
 	}
 	
-	
 	/**
-	 * 处理模型列表请求
+	 * 	处理模型列表请求
+	 * @param ctx
+	 * @param request
 	 */
 	private void handleModelListRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
 		try {

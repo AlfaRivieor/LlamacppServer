@@ -1,5 +1,7 @@
 package org.mark.llamacpp.server.struct;
 
+import java.util.List;
+
 /**
  * 加载模型请求参数
  */
@@ -46,6 +48,7 @@ public class LoadModelRequest {
     private Boolean enableVision;
     private String extraParams;
     private String slotSavePath;
+    private List<Integer> device;
     
     public LoadModelRequest() {
     }
@@ -134,6 +137,8 @@ public class LoadModelRequest {
     public void setExtraParams(String extraParams) { this.extraParams = extraParams; }
     public String getSlotSavePath() { return slotSavePath; }
     public void setSlotSavePath(String slotSavePath) { this.slotSavePath = slotSavePath; }
+    public List<Integer> getDevice() { return device; }
+    public void setDevice(List<Integer> device) { this.device = device; }
 
     @Override
     public String toString() {
@@ -157,6 +162,7 @@ public class LoadModelRequest {
                 ", enableVision=" + enableVision +
                 ", extraParams='" + extraParams + '\'' +
                 ", slotSavePath='" + slotSavePath + '\'' +
+                ", device=" + device +
                 '}';
     }
 }

@@ -28,6 +28,7 @@ public class ModelLaunchOptions {
     public String extraParams;
     public String host = "0.0.0.0";
     public String slotSavePath;
+    public List<Integer> device;
 
     public static ModelLaunchOptions fromLoadRequest(LoadModelRequest r) {
         ModelLaunchOptions o = new ModelLaunchOptions();
@@ -49,6 +50,7 @@ public class ModelLaunchOptions {
         o.enableVision = r.getEnableVision();
         o.extraParams = r.getExtraParams();
         o.slotSavePath = r.getSlotSavePath();
+        o.device = r.getDevice();
         return o;
     }
 
@@ -72,6 +74,7 @@ public class ModelLaunchOptions {
         m.put("enableVision", enableVision != null ? enableVision : true);
         m.put("extraParams", extraParams);
         m.put("slotSavePath", slotSavePath);
+        m.put("device", device);
         return m;
     }
 
@@ -102,6 +105,30 @@ public class ModelLaunchOptions {
     	if (reranking != null && reranking) { command.add("--reranking"); }
     	if (host != null && !host.isEmpty()) { command.add("--host " + host); }
     	if (slotSavePath != null && !slotSavePath.trim().isEmpty()) { command.add("--slot-save-path"); command.add(slotSavePath.trim()); }
+    	
+    	// 判断要使用的设备
+    	if (device != null && !device.isEmpty()) {
+    		// 1. 单个设备运行
+    		if (device.size() == 1 && device.get(0) != -1) {
+    			// 模型跨 GPU 的分割策略，单GPU时不适用
+    			command.add("-sm");
+    			command.add("none");
+    			// 指定主GPU
+    			command.add("-mg");
+    			command.add(String.valueOf(device.get(0)));
+    		}
+    		// 2. 多个设备运行
+    		if(device.size() > 1) {
+    			command.add("-dev");
+    			String p = "";
+    			for(Integer n : device) {
+    				p += n + ",";		
+    			}
+    			p = p.substring(0, p.length() - 2);
+    			command.add(p);
+    		}
+    	}
+    	
     	// Flash Attention
     	command.add("-fa");
     	if (flashAttention != null && !flashAttention) { command.add("0"); } else { command.add("1"); }

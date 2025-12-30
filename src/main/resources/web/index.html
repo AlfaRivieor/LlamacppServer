@@ -416,6 +416,7 @@
         }
         .modal-content.model-detail { width: 95%; max-width: 1000px; }
         .modal-content.slots-modal { width: 95%; max-width: 1200px; max-height: 85vh; }
+        .modal-content.load-model-modal { width: 95%; max-width: 1200px; }
         #slotsModal .modal-body { overflow: hidden; display: flex; flex-direction: column; }
 
         @keyframes slideIn {
@@ -795,108 +796,112 @@
 
     <!-- Load Model Modal -->
     <div class="modal" id="loadModelModal">
-        <div class="modal-content">
+        <div class="modal-content load-model-modal">
             <div class="modal-header">
                 <h3 class="modal-title"><i class="fas fa-upload"></i> 加载模型</h3>
                 <button class="modal-close" onclick="closeModal('loadModelModal')">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="loadModelForm">
-                    <div class="form-group">
-                        <label class="form-label" for="modelId">模型ID</label>
-                        <input type="text" class="form-control" id="modelId" name="modelId" readonly style="background-color: #f3f4f6; display: none;">
-                        <input type="text" class="form-control" id="modelName" name="modelName" readonly style="background-color: #f3f4f6;">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label" for="ctxSize">上下文大小 (ctx-size)</label>
-                        <input type="number" class="form-control" id="ctxSize" name="ctxSize" min="1" placeholder="例如: 2048" value="32768">
-                        <small class="form-text">模型的最大上下文长度</small>
-                        <small class="form-text" id="ctxSizeVramHint" style="color: var(--success-color);"></small>
-                    </div>
-                    
-                    <div class="settings-grid" style="height: auto; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
-                         <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label" for="batchSize">批处理大小 (batch-size)</label>
-                            <input type="number" class="form-control" id="batchSize" name="batchSize" min="1" placeholder="例如: 512" value="1024">
-                        </div>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label" for="ubatchSize">微批处理 (ubatch-size)</label>
-                            <input type="number" class="form-control" id="ubatchSize" name="ubatchSize" min="1" placeholder="例如: 512" value="2048">
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="llamaBinPathSelect">Llama.cpp 版本</label>
-                        <select class="form-control" id="llamaBinPathSelect" name="llamaBinPathSelect"></select>
-                    </div>
-                    
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input" id="noMmap" name="noMmap">
-                            <label class="form-check-label" for="noMmap">禁用内存映射 (no-mmap)</label>
-                        </div>
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input" id="mlock" name="mlock">
-                            <label class="form-check-label" for="mlock">锁定内存 (mlock)</label>
-                        </div>
-                        <div class="form-check" id="enableVisionGroup" style="display: none;">
-                            <input type="checkbox" class="form-check-input" id="enableVision" name="enableVision" checked>
-                            <label class="form-check-label" for="enableVision">开启视觉</label>
-                        </div>
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input" id="embedding" name="embedding">
-                            <label class="form-check-label" for="embedding">Embedding模式</label>
-                        </div>
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input" id="reranking" name="reranking">
-                            <label class="form-check-label" for="reranking">Reranking模式</label>
-                        </div>
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input" id="flashAttention" name="flashAttention" checked>
-                            <label class="form-check-label" for="flashAttention">Flash Attention</label>
-                        </div>
-                    </div>
-                    <!--
-                    <div class="form-group" id="vramEstimateGroup" style="display:none; margin-top: 0.5rem;">
-                        <label class="form-label">显存估算结果</label>
-                        <div class="form-control" id="vramEstimateResult" style="background-color:#f9fafb; min-height:38px; display:flex; align-items:center;"></div>
-                    </div>
-                    -->
-                    <details style="margin-top: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem;">
-                        <summary style="cursor: pointer; font-size: 0.875rem; color: var(--primary-color); font-weight: 500;">高级参数 (Temperature, Top-P, etc.)</summary>
-                        <div style="padding-top: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start;">
+                        <div>
                             <div class="form-group">
-                                <label class="form-label" for="temperature">Temperature</label>
-                                <input type="number" step="0.01" class="form-control" id="temperature" name="temperature" value="0.7">
+                                <label class="form-label" for="modelId">模型ID</label>
+                                <input type="text" class="form-control" id="modelId" name="modelId" readonly style="background-color: #f3f4f6; display: none;">
+                                <input type="text" class="form-control" id="modelName" name="modelName" readonly style="background-color: #f3f4f6;">
                             </div>
+                            
                             <div class="form-group">
-                                <label class="form-label" for="topP">Top P</label>
-                                <input type="number" step="0.01" class="form-control" id="topP" name="topP" value="0.95">
+                                <label class="form-label" for="ctxSize">上下文大小 (ctx-size)</label>
+                                <input type="number" class="form-control" id="ctxSize" name="ctxSize" min="1" placeholder="例如: 2048" value="32768">
+                                <small class="form-text">模型的最大上下文长度</small>
+                                <small class="form-text" id="ctxSizeVramHint" style="color: var(--success-color);"></small>
                             </div>
-                             <div class="form-group">
-                                <label class="form-label" for="topK">Top K</label>
-                                <input type="number" class="form-control" id="topK" name="topK" value="40">
-                            </div>
-                             <div class="form-group">
-                                <label class="form-label" for="minP">Min P</label>
-                                <input type="number" step="0.01" class="form-control" id="minP" name="minP" value="0.05">
-                            </div>
+                            
                             <div class="form-group">
-                                <label class="form-label" for="presencePenalty">Presence Penalty</label>
-                                <input type="number" step="0.01" class="form-control" id="presencePenalty" name="presencePenalty" value="0.0">
+                                <label class="form-label" for="llamaBinPathSelect">Llama.cpp 版本</label>
+                                <select class="form-control" id="llamaBinPathSelect" name="llamaBinPathSelect"></select>
                             </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="noMmap" name="noMmap" checked>
+                                    <label class="form-check-label" for="noMmap">禁用内存映射 (no-mmap)</label>
+                                </div>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="mlock" name="mlock">
+                                    <label class="form-check-label" for="mlock">锁定内存 (mlock)</label>
+                                </div>
+                                <div class="form-check" id="enableVisionGroup" style="display: none;">
+                                    <input type="checkbox" class="form-check-input" id="enableVision" name="enableVision" checked>
+                                    <label class="form-check-label" for="enableVision">开启视觉</label>
+                                </div>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="embedding" name="embedding">
+                                    <label class="form-check-label" for="embedding">Embedding模式</label>
+                                </div>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="reranking" name="reranking">
+                                    <label class="form-check-label" for="reranking">Reranking模式</label>
+                                </div>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="flashAttention" name="flashAttention" checked>
+                                    <label class="form-check-label" for="flashAttention">Flash Attention</label>
+                                </div>
+                            </div>
+                            <details style="margin-top: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem;">
+                                <summary style="cursor: pointer; font-size: 0.875rem; color: var(--primary-color); font-weight: 500;">高级参数 (Temperature, Top-P, etc.)</summary>
+                                <div style="padding-top: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div class="form-group">
+                                        <label class="form-label" for="temperature">Temperature</label>
+                                        <input type="number" step="0.01" class="form-control" id="temperature" name="temperature" value="0.7">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="topP">Top P</label>
+                                        <input type="number" step="0.01" class="form-control" id="topP" name="topP" value="0.95">
+                                    </div>
+                                     <div class="form-group">
+                                        <label class="form-label" for="topK">Top K</label>
+                                        <input type="number" class="form-control" id="topK" name="topK" value="40">
+                                    </div>
+                                     <div class="form-group">
+                                        <label class="form-label" for="minP">Min P</label>
+                                        <input type="number" step="0.01" class="form-control" id="minP" name="minP" value="0.05">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="presencePenalty">Presence Penalty</label>
+                                        <input type="number" step="0.01" class="form-control" id="presencePenalty" name="presencePenalty" value="0.0">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="repeatPenalty">Repeat Penalty</label>
+                                        <input type="number" step="0.01" class="form-control" id="repeatPenalty" name="repeatPenalty" value="1.10">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="batchSize">批处理大小 (batch-size)</label>
+                                        <input type="number" class="form-control" id="batchSize" name="batchSize" min="1" placeholder="例如: 512" value="1024">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="ubatchSize">微批处理 (ubatch-size)</label>
+                                        <input type="number" class="form-control" id="ubatchSize" name="ubatchSize" min="1" placeholder="例如: 512" value="2048">
+                                    </div>
+                                </div>
+                                <div class="form-group" style="margin-top: 1rem;">
+                                    <label class="form-label" for="extraParams">额外参数</label>
+                                    <textarea class="form-control" id="extraParams" name="extraParams" rows="2" placeholder="例如: --grp-attn-n 8 --grp-attn-w 512"></textarea>
+                                    <small class="form-text">输入额外的命令行参数，用空格分隔</small>
+                                </div>
+                            </details>
+                        </div>
+                        <div>
                             <div class="form-group">
-                                <label class="form-label" for="repeatPenalty">Repeat Penalty</label>
-                                <input type="number" step="0.01" class="form-control" id="repeatPenalty" name="repeatPenalty" value="1.10">
+                                <label class="form-label">可用计算设备</label>
+                                <small class="form-text">默认已勾选全部设备；取消勾选可排除设备</small>
+                                <div id="deviceChecklist" style="border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 0.75rem; max-height: 520px; overflow: auto;">
+                                    <div class="settings-empty">请先选择 Llama.cpp 版本</div>
+                                </div>
                             </div>
                         </div>
-                        <div class="form-group" style="margin-top: 1rem;">
-                            <label class="form-label" for="extraParams">额外参数</label>
-                            <textarea class="form-control" id="extraParams" name="extraParams" rows="2" placeholder="例如: --grp-attn-n 8 --grp-attn-w 512"></textarea>
-                            <small class="form-text">输入额外的命令行参数，用空格分隔</small>
-                        </div>
-                    </details>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -1500,6 +1505,7 @@
             document.getElementById('modelName').value = modelName;
             const hint = document.getElementById('ctxSizeVramHint');
             if (hint) hint.textContent = '';
+            window.__loadModelSelectedDevices = [-1];
 
             const currentModel = (currentModelsData || []).find(m => m && m.id === modelId);
             const isVisionModel = !!(currentModel && (currentModel.isMultimodal || currentModel.mmproj));
@@ -1527,6 +1533,7 @@
                         document.getElementById('extraParams').value = config.extraParams || '';
                         const enableVisionEl = document.getElementById('enableVision');
                         if (enableVisionEl) enableVisionEl.checked = config.enableVision !== undefined ? !!config.enableVision : true;
+                        window.__loadModelSelectedDevices = normalizeDeviceSelection(config.device);
                     }
                     
                     fetch('/api/llamacpp/list').then(r => r.json()).then(listData => {
@@ -1544,6 +1551,11 @@
                                 if (currentBin && select) select.value = currentBin;
                             }).catch(()=>{});
                         }
+                        
+                        select.onchange = function() { loadDeviceList(); };
+                        
+                        // Load device list initially
+                        loadDeviceList();
                     }).finally(() => {
                          const modal = document.getElementById('loadModelModal');
                          modal.classList.add('show');
@@ -1572,6 +1584,12 @@
             data.extraParams = document.getElementById('extraParams').value;
             const enableVisionEl = document.getElementById('enableVision');
             if (enableVisionEl) data.enableVision = enableVisionEl.checked;
+
+            const selectedDevices = getSelectedDevicesFromChecklist();
+            const availableCount = window.__availableDeviceCount;
+            const isAllSelected = Number.isFinite(availableCount) && availableCount > 0 && selectedDevices.length === availableCount;
+            if (isAllSelected) data.device = [-1];
+            else data.device = selectedDevices;
 
             const submitBtn = document.querySelector('#loadModelModal .btn-primary');
             submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 处理中...';
@@ -2745,6 +2763,69 @@
         }
         function initModelSearch() {
             document.getElementById('modelSearchInput').addEventListener('input', (e) => filterModels(e.target.value));
+        }
+        
+        function normalizeDeviceSelection(device) {
+            if (Array.isArray(device)) {
+                const parsed = device.map(v => parseInt(v, 10)).filter(v => Number.isFinite(v));
+                if (parsed.includes(-1)) return [-1];
+                return parsed.filter(v => v >= 0);
+            }
+            if (device === null || device === undefined || device === '') return [];
+            const v = parseInt(device, 10);
+            if (!Number.isFinite(v)) return [];
+            if (v === -1) return [-1];
+            return v >= 0 ? [v] : [];
+        }
+
+        function getSelectedDevicesFromChecklist() {
+            const list = document.getElementById('deviceChecklist');
+            if (!list) return [];
+            const values = Array.from(list.querySelectorAll('input[type="checkbox"][data-device-id]:checked'))
+                .map(el => parseInt(el.getAttribute('data-device-id'), 10))
+                .filter(v => Number.isFinite(v) && v >= 0);
+            values.sort((a, b) => a - b);
+            return values;
+        }
+
+        // GPU设备选择功能
+        function loadDeviceList() {
+            const list = document.getElementById('deviceChecklist');
+            if (list && list.querySelector('input[type="checkbox"][data-device-id]')) {
+                window.__loadModelSelectedDevices = getSelectedDevicesFromChecklist();
+            }
+            const llamaBinPath = document.getElementById('llamaBinPathSelect').value;
+            
+            if (!llamaBinPath) {
+                if (list) list.innerHTML = '<div class="settings-empty">请先选择 Llama.cpp 版本</div>';
+                return;
+            }
+            
+            // 使用GET请求，将llamaBinPath作为URL参数
+            fetch(`/api/model/device/list?llamaBinPath=${encodeURIComponent(llamaBinPath)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (!list) return;
+                if (!(data && data.success && data.data && Array.isArray(data.data.devices))) {
+                    list.innerHTML = '<div class="settings-empty">获取设备列表失败</div>';
+                    return;
+                }
+                const devices = data.data.devices;
+                window.__availableDeviceCount = devices.length;
+                const selected = window.__loadModelSelectedDevices || [];
+                const defaultAll = selected.includes(-1);
+                const items = devices.map((device, index) => {
+                    const checked = (defaultAll || selected.includes(index)) ? 'checked' : '';
+                    return `<label style="display:flex; align-items:flex-start; gap:8px; padding:6px 6px; border-radius:8px; cursor:pointer;">
+                        <input type="checkbox" ${checked} data-device-id="${index}" style="margin-top: 2px;">
+                        <span style="font-size: 0.9rem; color: var(--text-primary);">${escapeHtml(device)}</span>
+                    </label>`;
+                });
+                list.innerHTML = items.length ? items.join('') : '<div class="settings-empty">未发现可用设备</div>';
+            })
+            .catch(error => {
+                if (list) list.innerHTML = `<div class="settings-empty">获取设备列表失败：${escapeHtml(error && error.message ? error.message : '')}</div>`;
+            });
         }
     </script>
 </body>

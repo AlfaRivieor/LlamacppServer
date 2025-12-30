@@ -876,8 +876,11 @@ public class LlamaServerManager {
 	}
 	
 	
-	
-	
+	/**
+	 * 	查找可用的计算设备
+	 * @param llamaBinPath
+	 * @return
+	 */
 	public List<String> handleListDevices(String llamaBinPath) {
 		List<String> list = new ArrayList<>(8);
 		
