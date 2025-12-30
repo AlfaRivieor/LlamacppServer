@@ -1,5 +1,6 @@
 package org.mark.llamacpp.server.struct;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -84,7 +85,7 @@ public class ModelLaunchOptions {
     public List<String> toCmdLine(GGUFModel targetModel, int port) {
     	List<String> command = new ArrayList<>();
     	String binBase = llamaBinPath != null ? llamaBinPath.trim() : "";
-    	command.add(binBase + "/llama-server");
+    	command.add(binBase + File.separator + "llama-server");
     	command.add("-m");
     	command.add(targetModel.getPath() + "/" + targetModel.getPrimaryModel().getFileName());
     	command.add("--port");
