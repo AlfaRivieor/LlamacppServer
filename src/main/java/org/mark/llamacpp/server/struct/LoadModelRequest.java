@@ -39,6 +39,7 @@ public class LoadModelRequest {
     private Double temperature;
     private Double topP;
     private Integer topK;
+    private Integer parallel;
     private Double minP;
     private Double presencePenalty;
     private Double repeatPenalty;
@@ -117,6 +118,8 @@ public class LoadModelRequest {
     public void setTopP(Double topP) { this.topP = topP; }
     public Integer getTopK() { return topK; }
     public void setTopK(Integer topK) { this.topK = topK; }
+    public Integer getParallel() { return parallel; }
+    public void setParallel(Integer parallel) { this.parallel = parallel; }
     public Double getMinP() { return minP; }
     public void setMinP(Double minP) { this.minP = minP; }
     public Double getPresencePenalty() { return presencePenalty; }
@@ -156,6 +159,7 @@ public class LoadModelRequest {
                 ", temperature=" + temperature +
                 ", topP=" + topP +
                 ", topK=" + topK +
+                ", parallel=" + parallel +
                 ", minP=" + minP +
                 ", presencePenalty=" + presencePenalty +
                 ", repeatPenalty=" + repeatPenalty +

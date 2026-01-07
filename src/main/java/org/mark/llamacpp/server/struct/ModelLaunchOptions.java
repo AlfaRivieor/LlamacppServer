@@ -19,6 +19,7 @@ public class ModelLaunchOptions {
     public Double temperature;
     public Double topP;
     public Integer topK;
+    public Integer parallel;
     public Double minP;
     public Double presencePenalty;
     public Double repeatPenalty;
@@ -43,6 +44,7 @@ public class ModelLaunchOptions {
         o.temperature = r.getTemperature();
         o.topP = r.getTopP();
         o.topK = r.getTopK();
+        o.parallel = r.getParallel();
         o.minP = r.getMinP();
         o.presencePenalty = r.getPresencePenalty();
         o.repeatPenalty = r.getRepeatPenalty();
@@ -68,6 +70,7 @@ public class ModelLaunchOptions {
         m.put("temperature", temperature);
         m.put("topP", topP);
         m.put("topK", topK);
+        m.put("parallel", parallel);
         m.put("minP", minP);
         m.put("presencePenalty", presencePenalty);
         m.put("repeatPenalty", repeatPenalty);
@@ -102,6 +105,7 @@ public class ModelLaunchOptions {
     	if (temperature != null) { command.add("--temp"); command.add(String.valueOf(temperature)); }
     	if (topP != null) { command.add("--top-p"); command.add(String.valueOf(topP)); }
     	if (topK != null) { command.add("--top-k"); command.add(String.valueOf(topK)); }
+    	if (parallel != null) { command.add("--parallel"); command.add(String.valueOf(parallel)); }
     	if (minP != null) { command.add("--min-p"); command.add(String.valueOf(minP)); }
     	if (presencePenalty != null) { command.add("--presence-penalty"); command.add(String.valueOf(presencePenalty)); }
     	if (repeatPenalty != null) { command.add("--repeat-penalty"); command.add(String.valueOf(repeatPenalty)); }

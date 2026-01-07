@@ -170,6 +170,7 @@ public class ConfigManager {
         defaultConfig.put("ctxSize", 32768);
         defaultConfig.put("batchSize", 1024);
         defaultConfig.put("ubatchSize", 2048);
+        defaultConfig.put("parallel", 4);
         defaultConfig.put("noMmap", false);
         defaultConfig.put("mlock", false);
         defaultConfig.put("temperature", 0.7);
