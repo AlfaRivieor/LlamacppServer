@@ -168,7 +168,7 @@ public class ConfigManager {
     private Map<String, Object> createDefaultLaunchConfig() {
         Map<String, Object> defaultConfig = new HashMap<>();
         defaultConfig.put("ctxSize", 32768);
-        defaultConfig.put("batchSize", 1024);
+        defaultConfig.put("batchSize", 2048);
         defaultConfig.put("ubatchSize", 2048);
         defaultConfig.put("parallel", 4);
         defaultConfig.put("noMmap", false);
