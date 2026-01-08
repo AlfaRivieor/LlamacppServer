@@ -32,7 +32,6 @@ import org.mark.llamacpp.gguf.GGUFBundle;
 import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFModel;
 import org.mark.llamacpp.server.struct.ApiResponse;
-import org.mark.llamacpp.server.struct.ModelLaunchOptions;
 import org.mark.llamacpp.server.tools.CommandLineRunner;
 import org.mark.llamacpp.server.tools.PortChecker;
 import org.slf4j.Logger;
@@ -457,57 +456,57 @@ public class LlamaServerManager {
 		}
 	}
 	
-	/**
-	 * 异步加载指定的模型
-	 *
-	 * @param modelId 模型ID
-	 * @param ctxSize 上下文大小
-	 * @param batchSize 批处理大小
-	 * @param ubatchSize 微批处理大小
-	 * @param noMmap 是否禁用内存映射
-	 * @param mlock 是否锁定内存
-	 * @return 是否成功启动加载任务
-	 */
-    public synchronized boolean loadModelAsync(String modelId, ModelLaunchOptions options) {
-
-        Map<String, Object> launchConfig = options.toConfigMap();
-        this.configManager.saveLaunchConfig(modelId, launchConfig);
-		
-		// 检查模型是否已经加载
-		if (this.loadedProcesses.containsKey(modelId)) {
-			System.err.println("模型 " + modelId + " 已经加载");
-			// 发送WebSocket事件通知模型已加载
-			LlamaServer.sendModelLoadEvent(modelId, false, "模型已经加载");
-			return false;
-		}
-		
-		// 查找指定的模型
-		GGUFModel targetModel = this.findModelById(modelId);
-		
-        if (targetModel == null) {
-            System.err.println("未找到ID为 " + modelId + " 的模型");
-            // 发送WebSocket事件通知模型未找到
-            LlamaServer.sendModelLoadEvent(modelId, false, "未找到ID为 " + modelId + " 的模型");
-            return false;
-        }
-
-        if (options.llamaBinPath == null || options.llamaBinPath.trim().isEmpty()) {
-            LlamaServer.sendModelLoadEvent(modelId, false, "未提供llamaBinPath");
-            return false;
-        }
-		// 如果这个模型已经在加载中 
-		synchronized (this.loadingModels) {
-			if(this.loadingModels.contains(targetModel.getModelId())) {
-				LlamaServer.sendModelLoadEvent(modelId, false, "该模型正在加载中");
-				return false;
-			}
-		}
-        this.executorService.submit(() -> {
-            this.loadModelInBackground(modelId, targetModel, options);
-        });
-		
-		return true; // 表示成功提交加载任务
-	}
+//	/**
+//	 * 异步加载指定的模型
+//	 *
+//	 * @param modelId 模型ID
+//	 * @param ctxSize 上下文大小
+//	 * @param batchSize 批处理大小
+//	 * @param ubatchSize 微批处理大小
+//	 * @param noMmap 是否禁用内存映射
+//	 * @param mlock 是否锁定内存
+//	 * @return 是否成功启动加载任务
+//	 */
+//    public synchronized boolean loadModelAsync(String modelId, ModelLaunchOptions options) {
+//
+//        Map<String, Object> launchConfig = options.toConfigMap();
+//        this.configManager.saveLaunchConfig(modelId, launchConfig);
+//		
+//		// 检查模型是否已经加载
+//		if (this.loadedProcesses.containsKey(modelId)) {
+//			System.err.println("模型 " + modelId + " 已经加载");
+//			// 发送WebSocket事件通知模型已加载
+//			LlamaServer.sendModelLoadEvent(modelId, false, "模型已经加载");
+//			return false;
+//		}
+//		
+//		// 查找指定的模型
+//		GGUFModel targetModel = this.findModelById(modelId);
+//		
+//        if (targetModel == null) {
+//            System.err.println("未找到ID为 " + modelId + " 的模型");
+//            // 发送WebSocket事件通知模型未找到
+//            LlamaServer.sendModelLoadEvent(modelId, false, "未找到ID为 " + modelId + " 的模型");
+//            return false;
+//        }
+//
+//        if (options.llamaBinPath == null || options.llamaBinPath.trim().isEmpty()) {
+//            LlamaServer.sendModelLoadEvent(modelId, false, "未提供llamaBinPath");
+//            return false;
+//        }
+//		// 如果这个模型已经在加载中 
+//		synchronized (this.loadingModels) {
+//			if(this.loadingModels.contains(targetModel.getModelId())) {
+//				LlamaServer.sendModelLoadEvent(modelId, false, "该模型正在加载中");
+//				return false;
+//			}
+//		}
+//        this.executorService.submit(() -> {
+//            this.loadModelInBackground(modelId, targetModel, options);
+//        });
+//		
+//		return true; // 表示成功提交加载任务
+//	}
 
 	public synchronized boolean loadModelAsyncFromCmd(String modelId, String llamaBinPath, List<String> device, Integer mg, String cmd) {
 		Map<String, Object> launchConfig = new HashMap<>();
@@ -551,132 +550,132 @@ public class LlamaServerManager {
 		return true;
 	}
 	
-	/**
-	 * 在后台线程中执行模型加载
-	 */
-    private synchronized void loadModelInBackground(String modelId, GGUFModel targetModel, ModelLaunchOptions options) {
-
-        // 获取下一个可用端口
-        int port = this.getNextAvailablePort();
-
-        List<String> command = options.toCmdLine(targetModel, port);
-
-        // 构建完整的命令字符串
-        String commandStr = String.join(" ", command);
-		
-		// 创建并启动LlamaCppProcess
-		String processName = "llama-server-" + modelId;
-		LlamaCppProcess process = new LlamaCppProcess(processName, commandStr);
-		
-		System.out.println("启动命令：" + commandStr);
-		
-		// 使用CountDownLatch来同步等待加载结果
-		CountDownLatch latch = new CountDownLatch(1);
-		AtomicBoolean loadSuccess = new AtomicBoolean(false);
-		
-		// 设置输出处理器，接受llamacpp运行状态，然后判断特定的内容。
-        process.setOutputHandler(line -> {
-            //	判断是否加载成功。
-            //	1.这是成功了
-            if(line.contains("srv  update_slots: all slots are idle")) {
-                loadSuccess.set(true);
-                latch.countDown();
-            }
-            //	2.这是失败了
-            if(line.contains("main: exiting due to model loading error")) {
-                loadSuccess.set(false);
-                latch.countDown();
-            }
-            //	3.检测进程异常终止
-            if(line.contains("Inferior") && line.contains("detached")) {
-                // 检测到进程异常终止，如 [Inferior 1 (process 6869) detached]
-                System.err.println("检测到模型进程异常终止: " + line);
-                
-                // 设置加载失败状态
-                loadSuccess.set(false);
-                
-                // 从已加载进程列表中移除
-                this.loadedProcesses.remove(modelId);
-                this.modelPorts.remove(modelId);
-                
-                // 通过WebSocket广播模型停止事件
-                LlamaServer.sendModelStopEvent(modelId, false, "模型进程异常终止: " + line);
-                
-                // 唤醒等待的线程
-                latch.countDown();
-            }
-            //	4.检测到参数错误
-            if(line.startsWith("error")) {
-            	 System.err.println("检测到模型进程异常终止: " + line);
-                 // 设置加载失败状态
-                 loadSuccess.set(false);
-                 
-                 // 从已加载进程列表中移除
-                 this.loadedProcesses.remove(modelId);
-                 this.modelPorts.remove(modelId);
-                 
-                 // 通过WebSocket广播模型停止事件
-                 //LlamaServer.sendModelStopEvent(modelId, false, "模型启动失败: " + line);
-                 
-                 // 唤醒等待的线程
-                 latch.countDown();
-            }
-        });
-		
-		// 启动进程
-		boolean started = process.start();
-		if (!started) {
-			System.err.println("启动模型 " + modelId + " 失败");
-			// 发送WebSocket事件通知启动失败
-			LlamaServer.sendModelLoadEvent(modelId, false, "启动模型进程失败");
-			return;
-		}else {
-			// 设置模型的状态为启动中
-			synchronized (this.loadingModels) {
-				this.loadingModels.add(targetModel.getModelId());
-			}
-		}
-		
-		// 等待进程加载完成，超时时间10分钟
-		try {
-			boolean timeout = !latch.await(10, TimeUnit.MINUTES);
-			
-			if (timeout) {
-				System.err.println("加载模型 " + modelId + " 超时");
-				// 停止进程
-				process.stop();
-				// 发送WebSocket事件通知加载超时
-				LlamaServer.sendModelLoadEvent(modelId, false, "模型加载超时");
-				return;
-			}
-			
-			if (loadSuccess.get()) {
-				// 保存进程信息
-				this.loadedProcesses.put(modelId, process);
-				this.modelPorts.put(modelId, port);
-				System.out.println("成功启动模型 " + modelId + "，端口: " + port + "，PID: " + process.getPid());
-				// 发送WebSocket事件通知加载成功
-				LlamaServer.sendModelLoadEvent(modelId, true, "模型加载成功，端口: " + port);
-			} else {
-				System.err.println("加载模型 " + modelId + " 失败");
-				// 停止进程
-				process.stop();
-				// 发送WebSocket事件通知加载失败
-				LlamaServer.sendModelLoadEvent(modelId, false, "模型加载失败");
-			}
-		} catch (InterruptedException e) {
-			System.err.println("等待模型加载时被中断: " + e.getMessage());
-			Thread.currentThread().interrupt();
-			// 停止进程
-			process.stop();
-			// 发送WebSocket事件通知加载被中断
-			LlamaServer.sendModelLoadEvent(modelId, false, "模型加载被中断");
-		}finally {
-			synchronized (this.loadingModels) {
-				this.loadingModels.remove(targetModel.getModelId());
-			}
-		}
-	}
+//	/**
+//	 * 在后台线程中执行模型加载
+//	 */
+//    private synchronized void loadModelInBackground(String modelId, GGUFModel targetModel, ModelLaunchOptions options) {
+//
+//        // 获取下一个可用端口
+//        int port = this.getNextAvailablePort();
+//
+//        List<String> command = options.toCmdLine(targetModel, port);
+//
+//        // 构建完整的命令字符串
+//        String commandStr = String.join(" ", command);
+//		
+//		// 创建并启动LlamaCppProcess
+//		String processName = "llama-server-" + modelId;
+//		LlamaCppProcess process = new LlamaCppProcess(processName, commandStr);
+//		
+//		System.out.println("启动命令：" + commandStr);
+//		
+//		// 使用CountDownLatch来同步等待加载结果
+//		CountDownLatch latch = new CountDownLatch(1);
+//		AtomicBoolean loadSuccess = new AtomicBoolean(false);
+//		
+//		// 设置输出处理器，接受llamacpp运行状态，然后判断特定的内容。
+//        process.setOutputHandler(line -> {
+//            //	判断是否加载成功。
+//            //	1.这是成功了
+//            if(line.contains("srv  update_slots: all slots are idle")) {
+//                loadSuccess.set(true);
+//                latch.countDown();
+//            }
+//            //	2.这是失败了
+//            if(line.contains("main: exiting due to model loading error")) {
+//                loadSuccess.set(false);
+//                latch.countDown();
+//            }
+//            //	3.检测进程异常终止
+//            if(line.contains("Inferior") && line.contains("detached")) {
+//                // 检测到进程异常终止，如 [Inferior 1 (process 6869) detached]
+//                System.err.println("检测到模型进程异常终止: " + line);
+//                
+//                // 设置加载失败状态
+//                loadSuccess.set(false);
+//                
+//                // 从已加载进程列表中移除
+//                this.loadedProcesses.remove(modelId);
+//                this.modelPorts.remove(modelId);
+//                
+//                // 通过WebSocket广播模型停止事件
+//                LlamaServer.sendModelStopEvent(modelId, false, "模型进程异常终止: " + line);
+//                
+//                // 唤醒等待的线程
+//                latch.countDown();
+//            }
+//            //	4.检测到参数错误
+//            if(line.startsWith("error")) {
+//            	 System.err.println("检测到模型进程异常终止: " + line);
+//                 // 设置加载失败状态
+//                 loadSuccess.set(false);
+//                 
+//                 // 从已加载进程列表中移除
+//                 this.loadedProcesses.remove(modelId);
+//                 this.modelPorts.remove(modelId);
+//                 
+//                 // 通过WebSocket广播模型停止事件
+//                 //LlamaServer.sendModelStopEvent(modelId, false, "模型启动失败: " + line);
+//                 
+//                 // 唤醒等待的线程
+//                 latch.countDown();
+//            }
+//        });
+//		
+//		// 启动进程
+//		boolean started = process.start();
+//		if (!started) {
+//			System.err.println("启动模型 " + modelId + " 失败");
+//			// 发送WebSocket事件通知启动失败
+//			LlamaServer.sendModelLoadEvent(modelId, false, "启动模型进程失败");
+//			return;
+//		}else {
+//			// 设置模型的状态为启动中
+//			synchronized (this.loadingModels) {
+//				this.loadingModels.add(targetModel.getModelId());
+//			}
+//		}
+//		
+//		// 等待进程加载完成，超时时间10分钟
+//		try {
+//			boolean timeout = !latch.await(10, TimeUnit.MINUTES);
+//			
+//			if (timeout) {
+//				System.err.println("加载模型 " + modelId + " 超时");
+//				// 停止进程
+//				process.stop();
+//				// 发送WebSocket事件通知加载超时
+//				LlamaServer.sendModelLoadEvent(modelId, false, "模型加载超时");
+//				return;
+//			}
+//			
+//			if (loadSuccess.get()) {
+//				// 保存进程信息
+//				this.loadedProcesses.put(modelId, process);
+//				this.modelPorts.put(modelId, port);
+//				System.out.println("成功启动模型 " + modelId + "，端口: " + port + "，PID: " + process.getPid());
+//				// 发送WebSocket事件通知加载成功
+//				LlamaServer.sendModelLoadEvent(modelId, true, "模型加载成功，端口: " + port);
+//			} else {
+//				System.err.println("加载模型 " + modelId + " 失败");
+//				// 停止进程
+//				process.stop();
+//				// 发送WebSocket事件通知加载失败
+//				LlamaServer.sendModelLoadEvent(modelId, false, "模型加载失败");
+//			}
+//		} catch (InterruptedException e) {
+//			System.err.println("等待模型加载时被中断: " + e.getMessage());
+//			Thread.currentThread().interrupt();
+//			// 停止进程
+//			process.stop();
+//			// 发送WebSocket事件通知加载被中断
+//			LlamaServer.sendModelLoadEvent(modelId, false, "模型加载被中断");
+//		}finally {
+//			synchronized (this.loadingModels) {
+//				this.loadingModels.remove(targetModel.getModelId());
+//			}
+//		}
+//	}
 
 	private synchronized void loadModelInBackgroundFromCmd(String modelId, GGUFModel targetModel, String llamaBinPath, List<String> device,
 			Integer mg, String cmd) {

@@ -152,43 +152,6 @@ public class ConfigManager {
     }
     
     /**
-     * 获取指定模型的启动配置
-     * @param modelId 模型ID
-     * @return 模型的启动配置，如果不存在返回默认配置
-     */
-    public Map<String, Object> getLaunchConfig(String modelId) {
-        Map<String, Map<String, Object>> allConfigs = loadAllLaunchConfigs();
-        return allConfigs.getOrDefault(modelId, createDefaultLaunchConfig());
-    }
-    
-    /**
-     * 创建默认启动配置
-     * @return 默认启动配置
-     */
-    private Map<String, Object> createDefaultLaunchConfig() {
-        Map<String, Object> defaultConfig = new HashMap<>();
-        defaultConfig.put("ctxSize", 32768);
-        defaultConfig.put("batchSize", 2048);
-        defaultConfig.put("ubatchSize", 2048);
-        defaultConfig.put("parallel", 4);
-        defaultConfig.put("noMmap", false);
-        defaultConfig.put("mlock", false);
-        defaultConfig.put("temperature", 0.7);
-        defaultConfig.put("topP", 0.95);
-        defaultConfig.put("topK", 40);
-        defaultConfig.put("minP", 0.05);
-        defaultConfig.put("presencePenalty", 0.0);
-        defaultConfig.put("repeatPenalty", 1.0);
-        defaultConfig.put("embedding", false);
-        defaultConfig.put("reranking", false);
-        defaultConfig.put("enableVision", true);
-        defaultConfig.put("mg", -1);
-        defaultConfig.put("cacheTypeK", "f16");
-        defaultConfig.put("cacheTypeV", "f16");
-        return defaultConfig;
-    }
-    
-    /**
      * 将GGUFModel转换为可序列化的Map
      * @param model GGUFModel对象
      * @return 包含模型信息的Map
