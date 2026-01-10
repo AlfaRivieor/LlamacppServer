@@ -226,7 +226,7 @@
   },
   {
     "name": "DirectIO",
-    "fullName": "-no-direct-io",
+    "fullName": "--no-direct-io",
     "abbreviation": "-ndio",
     "type": "LOGIC",
     "defaultValue": "0",
