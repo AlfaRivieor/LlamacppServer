@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -81,7 +83,7 @@ public class CommandLineRunner {
 	 * @return 执行结果
 	 */
 	public static CommandResult execute(String command, int timeoutSeconds) {
-		return execute(command.split("\\s+"), timeoutSeconds);
+		return execute(splitCommandLineArgs(command).toArray(new String[0]), timeoutSeconds);
 	}
 
 	/**
@@ -242,6 +244,89 @@ public class CommandLineRunner {
 		} else if (!currentLdPath.contains(dir)) {
 			env.put("LD_LIBRARY_PATH", dir + ":" + currentLdPath);
 		}
+
+		if (os.contains("mac") || os.contains("darwin")) {
+			String currentDyldPath = env.get("DYLD_LIBRARY_PATH");
+			if (currentDyldPath == null || currentDyldPath.isBlank()) {
+				env.put("DYLD_LIBRARY_PATH", dir);
+			} else if (!currentDyldPath.contains(dir)) {
+				env.put("DYLD_LIBRARY_PATH", dir + ":" + currentDyldPath);
+			}
+
+			String currentFallback = env.get("DYLD_FALLBACK_LIBRARY_PATH");
+			if (currentFallback == null || currentFallback.isBlank()) {
+				env.put("DYLD_FALLBACK_LIBRARY_PATH", dir);
+			} else if (!currentFallback.contains(dir)) {
+				env.put("DYLD_FALLBACK_LIBRARY_PATH", dir + ":" + currentFallback);
+			}
+		}
+	}
+
+	private static List<String> splitCommandLineArgs(String commandLine) {
+		List<String> out = new ArrayList<>();
+		if (commandLine == null) {
+			return out;
+		}
+		String s = commandLine.trim();
+		if (s.isEmpty()) {
+			return out;
+		}
+
+		StringBuilder cur = new StringBuilder();
+		boolean inSingle = false;
+		boolean inDouble = false;
+
+		for (int i = 0; i < s.length(); i++) {
+			char c = s.charAt(i);
+
+			if (inDouble && c == '\\') {
+				if (i + 1 < s.length()) {
+					char n = s.charAt(i + 1);
+					if (n == '"') {
+						cur.append(n);
+						i++;
+						continue;
+					}
+				}
+				cur.append(c);
+				continue;
+			}
+			if (inSingle && c == '\\') {
+				if (i + 1 < s.length()) {
+					char n = s.charAt(i + 1);
+					if (n == '\'') {
+						cur.append(n);
+						i++;
+						continue;
+					}
+				}
+				cur.append(c);
+				continue;
+			}
+
+			if (c == '"' && !inSingle) {
+				inDouble = !inDouble;
+				continue;
+			}
+			if (c == '\'' && !inDouble) {
+				inSingle = !inSingle;
+				continue;
+			}
+
+			if (!inSingle && !inDouble && Character.isWhitespace(c)) {
+				if (cur.length() > 0) {
+					out.add(cur.toString());
+					cur.setLength(0);
+				}
+				continue;
+			}
+
+			cur.append(c);
+		}
+		if (cur.length() > 0) {
+			out.add(cur.toString());
+		}
+		return out;
 	}
 
 }

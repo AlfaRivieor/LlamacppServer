@@ -1535,12 +1535,18 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 					}
 				}
 			}
+			if (!exeFile.exists() || !exeFile.isFile()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("llama-cli可执行文件不存在: " + exeFile.getAbsolutePath()));
+				return;
+			}
 
-			String cmdVersion = exeFile.getAbsolutePath() + " --version";
-			CommandLineRunner.CommandResult versionResult = CommandLineRunner.execute(cmdVersion, 30);
+			String cmdVersion = quoteIfNeeded(exeFile.getAbsolutePath()) + " --version";
+			CommandLineRunner.CommandResult versionResult = CommandLineRunner.execute(
+					new String[] { exeFile.getAbsolutePath(), "--version" }, 30);
 
-			String cmdListDevices = exeFile.getAbsolutePath() + " --list-devices";
-			CommandLineRunner.CommandResult listDevicesResult = CommandLineRunner.execute(cmdListDevices, 30);
+			String cmdListDevices = quoteIfNeeded(exeFile.getAbsolutePath()) + " --list-devices";
+			CommandLineRunner.CommandResult listDevicesResult = CommandLineRunner.execute(
+					new String[] { exeFile.getAbsolutePath(), "--list-devices" }, 30);
 
 			Map<String, Object> data = new HashMap<>();
 
