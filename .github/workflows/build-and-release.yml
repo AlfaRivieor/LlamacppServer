@@ -97,16 +97,16 @@ jobs:
           rm jre-win.zip
           echo "Windows JRE 下载完成"
 
-      - name: 下载精简版 JRE (macOS)
-        run: |
-          mkdir -p jre-mac
-          curl -L -o jre-mac.zip https://github.com/IIIIIllllIIIIIlllll/Mini-JRE/releases/download/v1.0.0/mini-jre-21.06-mac-x64.zip
-          unzip -q jre-mac.zip -d jre-mac
-          JRE_NAME=$(ls jre-mac | head -1)
-          mv jre-mac/$JRE_NAME jre-mac/jre
-          chmod +x jre-mac/jre/bin/java
-          rm jre-mac.zip
-          echo "macOS JRE 下载完成"
+      # - name: 下载精简版 JRE (macOS)
+      #   run: |
+      #     mkdir -p jre-mac
+      #     curl -L -o jre-mac.zip https://github.com/IIIIIllllIIIIIlllll/Mini-JRE/releases/download/v1.0.0/mini-jre-21.06-mac-x64.zip
+      #     unzip -q jre-mac.zip -d jre-mac
+      #     JRE_NAME=$(ls jre-mac | head -1)
+      #     mv jre-mac/$JRE_NAME jre-mac/jre
+      #     chmod +x jre-mac/jre/bin/java
+      #     rm jre-mac.zip
+      #     echo "macOS JRE 下载完成"
 
       - name: 创建启动脚本 (Linux/Mac)
         run: |
@@ -190,14 +190,14 @@ jobs:
           rm llama-ubuntu-vulkan.tar.gz
           echo "Ubuntu Vulkan 版本下载完成"
 
-      - name: 下载 llama.cpp 预编译版本 (macOS ARM64)
-        run: |
-          echo "下载 llama.cpp macOS ARM64 版本..."
-          curl -L -o llama-macos-arm64.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.get_llamacpp_version.outputs.llamacpp_version }}/llama-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-bin-macos-arm64.tar.gz
-          mkdir macos-arm64
-          tar -xzf llama-macos-arm64.tar.gz -C macos-arm64
-          rm llama-macos-arm64.tar.gz
-          echo "macOS ARM64 版本下载完成"
+      # - name: 下载 llama.cpp 预编译版本 (macOS ARM64)
+      #   run: |
+      #     echo "下载 llama.cpp macOS ARM64 版本..."
+      #     curl -L -o llama-macos-arm64.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.get_llamacpp_version.outputs.llamacpp_version }}/llama-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-bin-macos-arm64.tar.gz
+      #     mkdir macos-arm64
+      #     tar -xzf llama-macos-arm64.tar.gz -C macos-arm64
+      #     rm llama-macos-arm64.tar.gz
+      #     echo "macOS ARM64 版本下载完成"
 
       - name: 打包 Linux Vulkan 版本
         run: |
@@ -235,14 +235,14 @@ jobs:
           mv build-win-hip llama-server-${{ steps.get_version.outputs.version }}-windows-hip
           zip -r llama-server-${{ steps.get_version.outputs.version }}-windows-hip.zip llama-server-${{ steps.get_version.outputs.version }}-windows-hip
 
-      - name: 打包 macOS ARM64 版本
-        run: |
-          cp -r build build-mac-arm64
-          cp -r jre-mac/jre build-mac-arm64/jre
-          mkdir -p build-mac-arm64/llamacpp
-          cp -r macos-arm64 build-mac-arm64/llamacpp/
-          mv build-mac-arm64 llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
-          zip -r llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
+      # - name: 打包 macOS ARM64 版本
+      #   run: |
+      #     cp -r build build-mac-arm64
+      #     cp -r jre-mac/jre build-mac-arm64/jre
+      #     mkdir -p build-mac-arm64/llamacpp
+      #     cp -r macos-arm64 build-mac-arm64/llamacpp/
+      #     mv build-mac-arm64 llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
+      #     zip -r llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
 
       - name: 生成 Release Notes
         id: release_notes
@@ -280,8 +280,8 @@ jobs:
           - `llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan.zip` - Vulkan 版本（通用 GPU）
           - `llama-server-${{ steps.get_version.outputs.version }}-windows-hip.zip` - HIP 版本（AMD GPU）
           
-          **macOS:**
-          - `llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip` - Apple Silicon (M1/M2/M3)
+          # **macOS:**
+          #  - `llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip` - Apple Silicon (M1/M2/M3)
           
           ### 📝 使用方法
           
@@ -302,15 +302,15 @@ jobs:
           run.bat
           ```
           
-          **macOS:**
-          ```bash
-          # Apple Silicon 用户
-          unzip llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip
-          cd llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
-          chmod +x run.sh
-          chmod +x jre/bin/java
-          ./run.sh
-          ```
+          # **macOS:**
+          #  ```bash
+          #  # Apple Silicon 用户
+          #  unzip llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip
+          #  cd llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
+          #  chmod +x run.sh
+          #  chmod +x jre/bin/java
+          #  ./run.sh
+          #  ```
           
           **注意：**
           - 本版本已内置精简版 JRE，无需额外安装 Java 环境。
@@ -357,7 +357,7 @@ jobs:
             llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12.zip
             llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan.zip
             llama-server-${{ steps.get_version.outputs.version }}-windows-hip.zip
-            llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip
+            # llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip
           body: ${{ env.NOTES_CONTENT }}
           draft: false
           prerelease: false
@@ -392,9 +392,9 @@ jobs:
           path: llama-server-${{ steps.get_version.outputs.version }}-windows-hip.zip
           retention-days: 30
 
-      - name: 上传构建产物 (macOS ARM64)
-        uses: actions/upload-artifact@v4
-        with:
-          name: llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
-          path: llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip
-          retention-days: 30
+      # - name: 上传构建产物 (macOS ARM64)
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
+      #     path: llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip
+      #     retention-days: 30
