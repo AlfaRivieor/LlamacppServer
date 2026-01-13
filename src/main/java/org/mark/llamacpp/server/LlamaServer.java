@@ -25,7 +25,7 @@ import org.mark.llamacpp.server.struct.LlamaCppDataStruct;
 import org.mark.llamacpp.server.struct.ModelPathConfig;
 import org.mark.llamacpp.server.websocket.WebSocketManager;
 import org.mark.llamacpp.server.websocket.WebSocketServerHandler;
-import org.mark.llamacpp.win.SystemTrayIcon;
+import org.mark.llamacpp.win.WindowsTray;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +61,57 @@ import io.netty.util.CharsetUtil;
  * 	程序的入口。
  */
 public class LlamaServer {
-    
+	
+	public static void main(String[] args) {
+		try {
+			Files.createDirectories(CONSOLE_LOG_PATH.getParent());
+			ConsoleBroadcastOutputStream out = new ConsoleBroadcastOutputStream(
+					new FileOutputStream(CONSOLE_LOG_PATH.toFile(), true), StandardCharsets.UTF_8);
+			PrintStream ps = new PrintStream(out, true, StandardCharsets.UTF_8.name());
+			System.setOut(ps);
+			System.setErr(ps);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		// 执行一次，创建缓存目录。
+		LlamaServer.getCachePath();
+
+		// 加载application.json配置文件
+		logger.info("正在加载application.json配置...");
+		loadApplicationConfig();
+
+		// 初始化配置管理器并加载配置
+		logger.info("正在初始化配置管理器...");
+		ConfigManager configManager = ConfigManager.getInstance();
+
+		// 预加载启动配置到内存中
+		logger.info("正在加载启动配置...");
+		configManager.loadAllLaunchConfigs();
+
+		// 初始化LlamaServerManager并预加载模型列表
+		logger.info("正在初始化模型管理器...");
+		LlamaServerManager serverManager = LlamaServerManager.getInstance();
+
+		// 预加载模型列表，这会同时保存模型信息到配置文件
+		logger.info("正在扫描模型目录...");
+		serverManager.listModel();
+
+		logger.info("系统初始化完成，启动Web服务器...");
+
+		Thread t1 = new Thread(() -> {
+			LlamaServer.bindOpenAI(webPort);
+		});
+		t1.start();
+
+		Thread t2 = new Thread(() -> {
+			LlamaServer.bindAnthropic(anthropicPort);
+		});
+		t2.start();
+
+		// 创建系统托盘
+		createWindowsSystemTray();
+	}
+	
 	private static final Logger logger = LoggerFactory.getLogger(LlamaServer.class);
 	
 	/**
@@ -258,82 +308,6 @@ public class LlamaServer {
     public static String getDefaultModelsPath() {
     	return DEFAULT_MODELS_DIRECTORY;
     }
-    
-    
-	public static void main(String[] args) {
-		try {
-			Files.createDirectories(CONSOLE_LOG_PATH.getParent());
-			ConsoleBroadcastOutputStream out = new ConsoleBroadcastOutputStream(
-					new FileOutputStream(CONSOLE_LOG_PATH.toFile(), true), StandardCharsets.UTF_8);
-			PrintStream ps = new PrintStream(out, true, StandardCharsets.UTF_8.name());
-			System.setOut(ps);
-			System.setErr(ps);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		// 执行一次，创建缓存目录。
-		LlamaServer.getCachePath();
-
-		// 加载application.json配置文件
-		logger.info("正在加载application.json配置...");
-		loadApplicationConfig();
-
-		// 初始化配置管理器并加载配置
-		logger.info("正在初始化配置管理器...");
-		ConfigManager configManager = ConfigManager.getInstance();
-
-		// 预加载启动配置到内存中
-		logger.info("正在加载启动配置...");
-		configManager.loadAllLaunchConfigs();
-
-		// 初始化LlamaServerManager并预加载模型列表
-		logger.info("正在初始化模型管理器...");
-		LlamaServerManager serverManager = LlamaServerManager.getInstance();
-
-		// 预加载模型列表，这会同时保存模型信息到配置文件
-		logger.info("正在扫描模型目录...");
-		serverManager.listModel();
-
-		logger.info("系统初始化完成，启动Web服务器...");
-
-		Thread t1 = new Thread(() -> {
-			LlamaServer.bindOpenAI(webPort);
-		});
-		t1.start();
-
-		Thread t2 = new Thread(() -> {
-			LlamaServer.bindAnthropic(anthropicPort);
-		});
-		t2.start();
-		
-		try {
-			SystemTrayIcon tray = new SystemTrayIcon();
-			
-			// 添加"打开首页"菜单项
-			tray.addMenuItem("打开首页", e -> {
-				try {
-					java.awt.Desktop.getDesktop().browse(new java.net.URI("http://127.0.0.1:8080"));
-				} catch (Exception ex) {
-					logger.error("打开浏览器失败", ex);
-				}
-			});
-			
-			// 添加分隔符
-			tray.addMenuSeparator();
-			
-			// 添加"退出程序"菜单项
-			tray.addMenuItem("退出程序", e -> {
-				tray.removeTrayIcon();
-				System.exit(0);
-			});
-			
-			// 使用资源文件中的图标创建托盘
-			tray.createTrayIconFromResource("/icon/icon.png", "LlamaCpp Server - 运行中");
-			tray.displayInfoMessage("启动成功", "LlamaCpp Server 已在后台运行");
-		} catch (Exception e) {
-			logger.warn("创建系统托盘图标失败: {}", e.getMessage());
-		}
-	}
     
     
     private static void bindAnthropic(int port) {
@@ -788,6 +762,45 @@ public class LlamaServer {
 			return "text/plain; charset=UTF-8";
 		default:
 			return "application/octet-stream";
+		}
+	}
+	
+	/**
+	 * 	创建系统托盘。
+	 */
+	private static void createWindowsSystemTray() {
+		// 判断操作系统是否为Windows，如果不是则直接返回
+		String osName = System.getProperty("os.name");
+		if (!osName.toLowerCase().startsWith("windows")) {
+			return;
+		}
+
+		try {
+			WindowsTray tray = WindowsTray.getInstance();
+
+			tray.addButton("打开首页", () -> {
+				try {
+					java.awt.Desktop.getDesktop().browse(new java.net.URI("http://127.0.0.1:" + webPort));
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			});
+			tray.addSeparator();
+			tray.addButton("退出程序", () -> System.exit(0));
+
+			tray.setDefaultAction(() -> {
+				// 双击托盘图标触发，暂时没东西
+				try {
+					java.awt.Desktop.getDesktop().browse(new java.net.URI("http://127.0.0.1:" + webPort));
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			});
+
+			tray.start("LlamaCpp Server - 运行中");
+			tray.displayInfoMessage("启动成功", "LlamaCpp Server 已在后台运行");
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 	}
 }
