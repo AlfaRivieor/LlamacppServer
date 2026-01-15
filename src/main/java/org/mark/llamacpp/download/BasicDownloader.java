@@ -540,30 +540,30 @@ public class BasicDownloader {
 		this.state = DownloadState.IDLE;
 	}
 	
-	/**
-	 * 	验证远程文件是否仍然有效
-	 * @throws IOException
-	 * @throws InterruptedException
-	 */
-	private void validateRemoteFile() throws IOException, InterruptedException {
-		this.checkStop();
-		HttpResponse<Void> headResponse = this.sendHeadOrFallback(this.finalUri);
-		if (headResponse == null) {
-			throw new IOException("无法验证远程文件");
-		}
-		
-		// 检查ETag是否匹配
-		String currentEtag = firstHeaderValue(headResponse.headers().map(), "etag");
-		if (this.etag != null && currentEtag != null && !normalizeEtag(this.etag).equals(normalizeEtag(currentEtag))) {
-			throw new IOException("远程文件已更改，无法断点续传");
-		}
-		
-		// 检查内容长度是否匹配
-		long remoteContentLength = parseContentLength(headResponse.headers().map());
-		if (this.contentLength > 0 && remoteContentLength > 0 && this.contentLength != remoteContentLength) {
-			throw new IOException("远程文件大小已更改，无法断点续传");
-		}
-	}
+//	/**
+//	 * 	验证远程文件是否仍然有效
+//	 * @throws IOException
+//	 * @throws InterruptedException
+//	 */
+//	private void validateRemoteFile() throws IOException, InterruptedException {
+//		this.checkStop();
+//		HttpResponse<Void> headResponse = this.sendHeadOrFallback(this.finalUri);
+//		if (headResponse == null) {
+//			throw new IOException("无法验证远程文件");
+//		}
+//		
+//		// 检查ETag是否匹配
+//		String currentEtag = firstHeaderValue(headResponse.headers().map(), "etag");
+//		if (this.etag != null && currentEtag != null && !normalizeEtag(this.etag).equals(normalizeEtag(currentEtag))) {
+//			throw new IOException("远程文件已更改，无法断点续传");
+//		}
+//		
+//		// 检查内容长度是否匹配
+//		long remoteContentLength = parseContentLength(headResponse.headers().map());
+//		if (this.contentLength > 0 && remoteContentLength > 0 && this.contentLength != remoteContentLength) {
+//			throw new IOException("远程文件大小已更改，无法断点续传");
+//		}
+//	}
 	
 	/**
 	 * 	单线程断点续传
@@ -573,73 +573,102 @@ public class BasicDownloader {
 	private void resumeSingle() throws IOException, InterruptedException {
 		this.partsTotal.set(1);
 		this.partsCompleted.set(0);
-		
-		// 检查已存在的文件大小
-		long existingFileSize = 0;
-		if (Files.exists(this.targetFile)) {
-			existingFileSize = Files.size(this.targetFile);
-		}
-		
-		// 如果已下载的文件大小超过总大小，则重新下载
-		if (existingFileSize >= this.contentLength) {
-			Files.deleteIfExists(this.targetFile);
-			existingFileSize = 0;
-		}
-		
-		// 如果没有已下载的内容，则使用普通下载
-		if (existingFileSize == 0) {
-			downloadSingle();
-			return;
-		}
-		
-		this.downloadedBytes.set(existingFileSize);
-		
-		// 使用Range请求继续下载
-		HttpRequest get = HttpRequest.newBuilder()
-				.uri(this.finalUri)
-				.timeout(this.requestTimeout)
-				.header("User-Agent", this.userAgent)
-				.header("Range", "bytes=" + existingFileSize + "-")
-				.GET()
-				.build();
-		
-		HttpResponse<InputStream> response = this.httpClient.send(get, BodyHandlers.ofInputStream());
-		if (response.statusCode() != 206) {
-			// 如果服务器不支持范围请求，则重新下载
-			Files.deleteIfExists(this.targetFile);
-			downloadSingle();
-			return;
-		}
-		
-		try (InputStream in = new BufferedInputStream(response.body());
-				OutputStream out = new BufferedOutputStream(new FileOutputStream(this.targetFile.toString(), true))) {
-			this.activeResources.add(in);
-			this.activeResources.add(out);
-			byte[] buffer = new byte[1024 * 256];
-			int read;
-			try {
-				while ((read = in.read(buffer)) != -1) {
-					this.checkStop();
-					out.write(buffer, 0, read);
-					this.downloadedBytes.addAndGet(read);
+
+		long backoffMillis = 200;
+		int attempt = 0;
+		while (true) {
+			this.checkStop();
+			attempt++;
+
+			long existingFileSize = 0;
+			if (Files.exists(this.targetFile)) {
+				existingFileSize = Files.size(this.targetFile);
+			}
+
+			if (existingFileSize >= this.contentLength) {
+				if (existingFileSize == this.contentLength) {
+					this.downloadedBytes.set(existingFileSize);
+					this.partsCompleted.set(1);
+					return;
+				}
+				Files.deleteIfExists(this.targetFile);
+				this.downloadedBytes.set(0);
+				downloadSingle();
+				return;
+			}
+
+			if (existingFileSize == 0) {
+				downloadSingle();
+				return;
+			}
+
+			this.downloadedBytes.set(existingFileSize);
+
+			HttpRequest get = HttpRequest.newBuilder()
+					.uri(this.finalUri)
+					.timeout(this.requestTimeout)
+					.header("User-Agent", this.userAgent)
+					.header("Range", "bytes=" + existingFileSize + "-")
+					.GET()
+					.build();
+
+			HttpResponse<InputStream> response = this.httpClient.send(get, BodyHandlers.ofInputStream());
+			if (response.statusCode() != 206) {
+				Files.deleteIfExists(this.targetFile);
+				this.downloadedBytes.set(0);
+				downloadSingle();
+				return;
+			}
+
+			try (InputStream in = new BufferedInputStream(response.body());
+					OutputStream out = new BufferedOutputStream(new FileOutputStream(this.targetFile.toString(), true))) {
+				this.activeResources.add(in);
+				this.activeResources.add(out);
+				byte[] buffer = new byte[1024 * 256];
+				int read;
+				try {
+					while ((read = in.read(buffer)) != -1) {
+						this.checkStop();
+						out.write(buffer, 0, read);
+						this.downloadedBytes.addAndGet(read);
+					}
+				} catch (IOException e) {
+					if (this.stopRequested.get() || Thread.currentThread().isInterrupted()) {
+						throw new InterruptedException("下载已暂停");
+					}
+					throw e;
+				} finally {
+					this.activeResources.remove(in);
+					this.activeResources.remove(out);
 				}
 			} catch (IOException e) {
 				if (this.stopRequested.get() || Thread.currentThread().isInterrupted()) {
 					throw new InterruptedException("下载已暂停");
 				}
-				throw e;
-			} finally {
-				this.activeResources.remove(in);
-				this.activeResources.remove(out);
+				long actual = Files.exists(this.targetFile) ? Files.size(this.targetFile) : 0;
+				this.downloadedBytes.set(actual);
+				if (attempt > this.maxRetries) {
+					throw e;
+				}
+				Thread.sleep(backoffMillis);
+				backoffMillis = Math.min(backoffMillis * 2, 5_000);
+				continue;
 			}
+
+			long size = Files.size(this.targetFile);
+			if (this.contentLength > 0 && size != this.contentLength) {
+				this.downloadedBytes.set(size);
+				if (attempt > this.maxRetries) {
+					throw new IOException("下载文件大小不匹配，期望: " + this.contentLength + " 实际: " + size);
+				}
+				Thread.sleep(backoffMillis);
+				backoffMillis = Math.min(backoffMillis * 2, 5_000);
+				continue;
+			}
+
+			this.partsCompleted.set(1);
+			return;
 		}
-		
-		long size = Files.size(this.targetFile);
-		if (this.contentLength > 0 && size != this.contentLength) {
-			throw new IOException("下载文件大小不匹配，期望: " + this.contentLength + " 实际: " + size);
-		}
-		
-		this.partsCompleted.set(1);
 	}
 	
 	/**
@@ -655,7 +684,6 @@ public class BasicDownloader {
 		
 		// 检查已存在的分片文件
 		List<Path> partFiles = new ArrayList<>();
-		List<Part> remainingParts = new ArrayList<>();
 		int completedParts = 0;
 		
 		for (int i = 0; i < parts.size(); i++) {
@@ -671,15 +699,12 @@ public class BasicDownloader {
 					this.partsCompleted.incrementAndGet();
 				} else if (partSize > 0 && partSize < part.length()) {
 					this.downloadedBytes.addAndGet(partSize);
-					remainingParts.add(part);
 				} else {
 					// 分片不完整，需要重新下载
 					Files.deleteIfExists(partFile);
-					remainingParts.add(part);
 				}
 			} else {
 				// 分片不存在，需要下载
-				remainingParts.add(part);
 			}
 		}
 		
@@ -705,7 +730,7 @@ public class BasicDownloader {
 		}
 		
 		// 下载剩余的分片
-		ExecutorService pool = Executors.newFixedThreadPool(Math.min(this.parallelism, remainingParts.size()), Thread.ofVirtual().factory());
+		ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
 		this.activePool = pool;
 		try {
 			List<Future<Void>> futures = new ArrayList<>();
@@ -838,17 +863,19 @@ public class BasicDownloader {
 		if (headResponse.statusCode() >= 200 && headResponse.statusCode() <= 299) {
 			return headResponse;
 		}
-//		HttpRequest rangeGet = HttpRequest.newBuilder()
-//				.uri(uri)
-//				.timeout(this.requestTimeout)
-//				.header("User-Agent", this.userAgent)
-//				.header("Range", "bytes=0-0")
-//				.method("GET", HttpRequest.BodyPublishers.noBody())
-//				.build();
-//		HttpResponse<Void> rangeResponse = this.httpClient.send(rangeGet, BodyHandlers.discarding());
-//		if (rangeResponse.statusCode() == 206 || rangeResponse.statusCode() == 200) {
-//			return rangeResponse;
-//		}
+		
+		this.checkStop();
+		HttpRequest rangeGet = HttpRequest.newBuilder()
+				.uri(uri)
+				.timeout(this.requestTimeout)
+				.header("User-Agent", this.userAgent)
+				.header("Range", "bytes=0-0")
+				.GET()
+				.build();
+		HttpResponse<Void> rangeResponse = this.httpClient.send(rangeGet, BodyHandlers.discarding());
+		if (rangeResponse.statusCode() == 206 || rangeResponse.statusCode() == 200) {
+			return rangeResponse;
+		}
 		return null;
 	}
 	
@@ -880,49 +907,74 @@ public class BasicDownloader {
 	private void downloadSingle() throws IOException, InterruptedException {
 		this.partsTotal.set(1);
 		this.partsCompleted.set(0);
-		this.checkStop();
-		
-		HttpRequest get = HttpRequest.newBuilder()
-				.uri(this.finalUri)
-				.timeout(this.requestTimeout)
-				.header("User-Agent", this.userAgent)
-				.GET()
-				.build();
-		
-		HttpResponse<InputStream> response = this.httpClient.send(get, BodyHandlers.ofInputStream());
-		if (response.statusCode() != 200 && response.statusCode() != 206) {
-			throw new IOException("下载失败，HTTP状态码: " + response.statusCode());
-		}
-		
-		try (InputStream in = new BufferedInputStream(response.body());
-				OutputStream out = new BufferedOutputStream(new FileOutputStream(this.targetFile.toString(), false))) {
-			this.activeResources.add(in);
-			this.activeResources.add(out);
-			byte[] buffer = new byte[1024 * 256];
-			int read;
+
+		long backoffMillis = 200;
+		int attempt = 0;
+		while (true) {
+			this.checkStop();
+			attempt++;
+
+			this.downloadedBytes.set(0);
+			Files.deleteIfExists(this.targetFile);
+
+			HttpRequest get = HttpRequest.newBuilder()
+					.uri(this.finalUri)
+					.timeout(this.requestTimeout)
+					.header("User-Agent", this.userAgent)
+					.GET()
+					.build();
+
 			try {
-				while ((read = in.read(buffer)) != -1) {
-					this.checkStop();
-					out.write(buffer, 0, read);
-					this.downloadedBytes.addAndGet(read);
+				HttpResponse<InputStream> response = this.httpClient.send(get, BodyHandlers.ofInputStream());
+				if (response.statusCode() != 200 && response.statusCode() != 206) {
+					throw new IOException("下载失败，HTTP状态码: " + response.statusCode());
 				}
+
+				try (InputStream in = new BufferedInputStream(response.body());
+						OutputStream out = new BufferedOutputStream(new FileOutputStream(this.targetFile.toString(), false))) {
+					this.activeResources.add(in);
+					this.activeResources.add(out);
+					byte[] buffer = new byte[1024 * 256];
+					int read;
+					try {
+						while ((read = in.read(buffer)) != -1) {
+							this.checkStop();
+							out.write(buffer, 0, read);
+							this.downloadedBytes.addAndGet(read);
+						}
+					} catch (IOException e) {
+						if (this.stopRequested.get() || Thread.currentThread().isInterrupted()) {
+							throw new InterruptedException("下载已暂停");
+						}
+						throw e;
+					} finally {
+						this.activeResources.remove(in);
+						this.activeResources.remove(out);
+					}
+				}
+
+				long size = Files.size(this.targetFile);
+				if (this.contentLength > 0 && size != this.contentLength) {
+					throw new IOException("下载文件大小不匹配，期望: " + this.contentLength + " 实际: " + size);
+				}
+
+				this.partsCompleted.set(1);
+				return;
+			} catch (InterruptedException e) {
+				throw e;
 			} catch (IOException e) {
 				if (this.stopRequested.get() || Thread.currentThread().isInterrupted()) {
 					throw new InterruptedException("下载已暂停");
 				}
-				throw e;
-			} finally {
-				this.activeResources.remove(in);
-				this.activeResources.remove(out);
+				long actual = Files.exists(this.targetFile) ? Files.size(this.targetFile) : 0;
+				this.downloadedBytes.set(actual);
+				if (attempt > this.maxRetries) {
+					throw e;
+				}
+				Thread.sleep(backoffMillis);
+				backoffMillis = Math.min(backoffMillis * 2, 5_000);
 			}
 		}
-		
-		long size = Files.size(this.targetFile);
-		if (this.contentLength > 0 && size != this.contentLength) {
-			throw new IOException("下载文件大小不匹配，期望: " + this.contentLength + " 实际: " + size);
-		}
-		
-		this.partsCompleted.set(1);
 	}
 	
 	/**
@@ -941,7 +993,7 @@ public class BasicDownloader {
 			partFiles.add(this.targetFile.resolveSibling(this.targetFile.getFileName().toString() + ".part" + i));
 		}
 		
-		ExecutorService pool = Executors.newFixedThreadPool(Math.min(this.parallelism, parts.size()), Thread.ofVirtual().factory());
+		ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
 		this.activePool = pool;
 		try {
 			List<Future<Void>> futures = new ArrayList<>();
