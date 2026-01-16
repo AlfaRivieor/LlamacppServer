@@ -2,6 +2,7 @@ package org.mark.llamacpp.server;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import org.mark.llamacpp.gguf.GGUFModel;
 
@@ -10,9 +11,11 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +35,9 @@ public class ConfigManager {
 
     private volatile List<Map<String, Object>> cachedModelsConfig = null;
     private volatile long cachedModelsConfigLastModified = -1L;
+
+    private final Object modelsFileLock = new Object();
+    private final Object launchFileLock = new Object();
     
     private ConfigManager() {
         // 创建Gson实例，设置美观格式化
@@ -66,23 +72,20 @@ public class ConfigManager {
      * @return 是否保存成功
      */
     public boolean saveModelsConfig(List<GGUFModel> models) {
-        try {
-            // 将GGUFModel列表转换为可序列化的Map列表
-            List<Map<String, Object>> modelsData = models.stream()
-                .map(this::modelToMap)
-                .toList();
-            
-            // 写入文件
-            try (FileWriter writer = new FileWriter(MODELS_CONFIG_FILE)) {
-                gson.toJson(modelsData, writer);
+        synchronized (modelsFileLock) {
+            try {
+                List<Map<String, Object>> modelsData = models.stream()
+                    .map(this::modelToMap)
+                    .toList();
+                writeJsonFileAtomic(MODELS_CONFIG_FILE, modelsData);
                 System.out.println("模型配置已保存到: " + MODELS_CONFIG_FILE);
                 this.cachedModelsConfig = null;
                 this.cachedModelsConfigLastModified = -1L;
                 return true;
+            } catch (IOException e) {
+                System.err.println("保存模型配置失败: " + e.getMessage());
+                return false;
             }
-        } catch (IOException e) {
-            System.err.println("保存模型配置失败: " + e.getMessage());
-            return false;
         }
     }
     
@@ -93,22 +96,17 @@ public class ConfigManager {
      * @return 是否保存成功
      */
     public boolean saveLaunchConfig(String modelId, Map<String, Object> launchConfig) {
-        try {
-            // 读取现有的启动配置
-            Map<String, Map<String, Object>> allConfigs = loadAllLaunchConfigs();
-            
-            // 更新或添加新配置
-            allConfigs.put(modelId, launchConfig);
-            
-            // 写入文件
-            try (FileWriter writer = new FileWriter(LAUNCH_CONFIG_FILE)) {
-                gson.toJson(allConfigs, writer);
+        synchronized (launchFileLock) {
+            try {
+                Map<String, Map<String, Object>> allConfigs = loadAllLaunchConfigsUnsafe();
+                allConfigs.put(modelId, launchConfig);
+                writeJsonFileAtomic(LAUNCH_CONFIG_FILE, allConfigs);
                 System.out.println("启动配置已保存到: " + LAUNCH_CONFIG_FILE);
                 return true;
+            } catch (IOException e) {
+                System.err.println("保存启动配置失败: " + e.getMessage());
+                return false;
             }
-        } catch (IOException e) {
-            System.err.println("保存启动配置失败: " + e.getMessage());
-            return false;
         }
     }
     
@@ -117,39 +115,29 @@ public class ConfigManager {
      * @return 模型列表数据，如果加载失败返回空列表
      */
     public List<Map<String, Object>> loadModelsConfig() {
-        File configFile = new File(MODELS_CONFIG_FILE);
-        if (!configFile.exists()) {
-            System.out.println("模型配置文件不存在，返回空列表: " + MODELS_CONFIG_FILE);
-            return List.of();
-        }
-        
-        try (FileReader reader = new FileReader(configFile)) {
-            Type listType = new TypeToken<List<Map<String, Object>>>() {}.getType();
-            List<Map<String, Object>> modelsData = gson.fromJson(reader, listType);
-            System.out.println("成功加载模型配置: " + MODELS_CONFIG_FILE);
-            return modelsData != null ? modelsData : List.of();
-        } catch (IOException e) {
-            System.err.println("加载模型配置失败: " + e.getMessage());
-            return List.of();
+        synchronized (modelsFileLock) {
+            return loadModelsConfigUnsafe();
         }
     }
 
     public List<Map<String, Object>> loadModelsConfigCached() {
-        File configFile = new File(MODELS_CONFIG_FILE);
-        if (!configFile.exists()) {
-            this.cachedModelsConfig = List.of();
-            this.cachedModelsConfigLastModified = -1L;
-            return List.of();
+        synchronized (modelsFileLock) {
+            File configFile = new File(MODELS_CONFIG_FILE);
+            if (!configFile.exists()) {
+                this.cachedModelsConfig = List.of();
+                this.cachedModelsConfigLastModified = -1L;
+                return List.of();
+            }
+            long lastModified = configFile.lastModified();
+            List<Map<String, Object>> cached = this.cachedModelsConfig;
+            if (cached != null && this.cachedModelsConfigLastModified == lastModified) {
+                return cached;
+            }
+            List<Map<String, Object>> loaded = loadModelsConfigUnsafe();
+            this.cachedModelsConfig = loaded;
+            this.cachedModelsConfigLastModified = lastModified;
+            return loaded;
         }
-        long lastModified = configFile.lastModified();
-        List<Map<String, Object>> cached = this.cachedModelsConfig;
-        if (cached != null && this.cachedModelsConfigLastModified == lastModified) {
-            return cached;
-        }
-        List<Map<String, Object>> loaded = loadModelsConfig();
-        this.cachedModelsConfig = loaded;
-        this.cachedModelsConfigLastModified = lastModified;
-        return loaded;
     }
     
     /**
@@ -157,20 +145,8 @@ public class ConfigManager {
      * @return 所有启动配置的映射，如果加载失败返回空Map
      */
     public Map<String, Map<String, Object>> loadAllLaunchConfigs() {
-        File configFile = new File(LAUNCH_CONFIG_FILE);
-        if (!configFile.exists()) {
-            System.out.println("启动配置文件不存在，返回空配置: " + LAUNCH_CONFIG_FILE);
-            return new HashMap<>();
-        }
-        
-        try (FileReader reader = new FileReader(configFile)) {
-            Type mapType = new TypeToken<Map<String, Map<String, Object>>>() {}.getType();
-            Map<String, Map<String, Object>> configs = gson.fromJson(reader, mapType);
-            System.out.println("成功加载启动配置: " + LAUNCH_CONFIG_FILE);
-            return configs != null ? configs : new HashMap<>();
-        } catch (IOException e) {
-            System.err.println("加载启动配置失败: " + e.getMessage());
-            return new HashMap<>();
+        synchronized (launchFileLock) {
+            return loadAllLaunchConfigsUnsafe();
         }
     }
     
@@ -220,33 +196,32 @@ public class ConfigManager {
      * 保存/更新模型别名到models.json
      */
     public boolean saveModelAlias(String modelId, String alias) {
-        try {
-            List<Map<String, Object>> models = new java.util.ArrayList<>(loadModelsConfig());
-            boolean found = false;
-            for (Map<String, Object> m : models) {
-                Object id = m.get("modelId");
-                if (id != null && modelId.equals(String.valueOf(id))) {
-                    m.put("alias", alias);
-                    found = true;
-                    break;
+        synchronized (modelsFileLock) {
+            try {
+                List<Map<String, Object>> models = new java.util.ArrayList<>(loadModelsConfigUnsafe());
+                boolean found = false;
+                for (Map<String, Object> m : models) {
+                    Object id = m.get("modelId");
+                    if (id != null && modelId.equals(String.valueOf(id))) {
+                        m.put("alias", alias);
+                        found = true;
+                        break;
+                    }
                 }
-            }
-            // 如果未找到，追加一个最小记录以保留别名
-            if (!found) {
-                Map<String, Object> minimal = new HashMap<>();
-                minimal.put("modelId", modelId);
-                minimal.put("alias", alias);
-                models.add(minimal);
-            }
-            try (FileWriter writer = new FileWriter(MODELS_CONFIG_FILE)) {
-                gson.toJson(models, writer);
+                if (!found) {
+                    Map<String, Object> minimal = new HashMap<>();
+                    minimal.put("modelId", modelId);
+                    minimal.put("alias", alias);
+                    models.add(minimal);
+                }
+                writeJsonFileAtomic(MODELS_CONFIG_FILE, models);
                 this.cachedModelsConfig = null;
                 this.cachedModelsConfigLastModified = -1L;
                 return true;
+            } catch (IOException e) {
+                System.err.println("保存模型别名失败: " + e.getMessage());
+                return false;
             }
-        } catch (IOException e) {
-            System.err.println("保存模型别名失败: " + e.getMessage());
-            return false;
         }
     }
 
@@ -267,32 +242,32 @@ public class ConfigManager {
     }
 
     public boolean saveModelFavourite(String modelId, boolean favourite) {
-        try {
-            List<Map<String, Object>> models = new java.util.ArrayList<>(loadModelsConfig());
-            boolean found = false;
-            for (Map<String, Object> m : models) {
-                Object id = m.get("modelId");
-                if (id != null && modelId.equals(String.valueOf(id))) {
-                    m.put("favourite", favourite);
-                    found = true;
-                    break;
+        synchronized (modelsFileLock) {
+            try {
+                List<Map<String, Object>> models = new java.util.ArrayList<>(loadModelsConfigUnsafe());
+                boolean found = false;
+                for (Map<String, Object> m : models) {
+                    Object id = m.get("modelId");
+                    if (id != null && modelId.equals(String.valueOf(id))) {
+                        m.put("favourite", favourite);
+                        found = true;
+                        break;
+                    }
                 }
-            }
-            if (!found) {
-                Map<String, Object> minimal = new HashMap<>();
-                minimal.put("modelId", modelId);
-                minimal.put("favourite", favourite);
-                models.add(minimal);
-            }
-            try (FileWriter writer = new FileWriter(MODELS_CONFIG_FILE)) {
-                gson.toJson(models, writer);
+                if (!found) {
+                    Map<String, Object> minimal = new HashMap<>();
+                    minimal.put("modelId", modelId);
+                    minimal.put("favourite", favourite);
+                    models.add(minimal);
+                }
+                writeJsonFileAtomic(MODELS_CONFIG_FILE, models);
                 this.cachedModelsConfig = null;
                 this.cachedModelsConfigLastModified = -1L;
                 return true;
+            } catch (IOException e) {
+                System.err.println("保存模型喜好失败: " + e.getMessage());
+                return false;
             }
-        } catch (IOException e) {
-            System.err.println("保存模型喜好失败: " + e.getMessage());
-            return false;
         }
     }
 
@@ -312,5 +287,57 @@ public class ConfigManager {
             favourites.put(String.valueOf(id), v);
         }
         return favourites;
+    }
+
+    private List<Map<String, Object>> loadModelsConfigUnsafe() {
+        File configFile = new File(MODELS_CONFIG_FILE);
+        if (!configFile.exists()) {
+            System.out.println("模型配置文件不存在，返回空列表: " + MODELS_CONFIG_FILE);
+            return List.of();
+        }
+
+        try (FileReader reader = new FileReader(configFile)) {
+            Type listType = new TypeToken<List<Map<String, Object>>>() {}.getType();
+            List<Map<String, Object>> modelsData = gson.fromJson(reader, listType);
+            System.out.println("成功加载模型配置: " + MODELS_CONFIG_FILE);
+            return modelsData != null ? modelsData : List.of();
+        } catch (IOException | JsonSyntaxException e) {
+            System.err.println("加载模型配置失败: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    private Map<String, Map<String, Object>> loadAllLaunchConfigsUnsafe() {
+        File configFile = new File(LAUNCH_CONFIG_FILE);
+        if (!configFile.exists()) {
+            System.out.println("启动配置文件不存在，返回空配置: " + LAUNCH_CONFIG_FILE);
+            return new HashMap<>();
+        }
+
+        try (FileReader reader = new FileReader(configFile)) {
+            Type mapType = new TypeToken<Map<String, Map<String, Object>>>() {}.getType();
+            Map<String, Map<String, Object>> configs = gson.fromJson(reader, mapType);
+            return configs != null ? configs : new HashMap<>();
+        } catch (IOException | JsonSyntaxException e) {
+            System.err.println("加载启动配置失败: " + e.getMessage());
+            return new HashMap<>();
+        }
+    }
+
+    private void writeJsonFileAtomic(String filePath, Object data) throws IOException {
+        Path target = Paths.get(filePath);
+        Path parent = target.getParent();
+        if (parent != null && !Files.exists(parent)) {
+            Files.createDirectories(parent);
+        }
+        Path temp = target.resolveSibling(target.getFileName() + ".tmp");
+        try (FileWriter writer = new FileWriter(temp.toFile())) {
+            gson.toJson(data, writer);
+        }
+        try {
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 }

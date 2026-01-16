@@ -1266,6 +1266,7 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 				merged.put("cmd", cmd);
 				merged.put("device", device);
 				merged.put("enableVision", enableVision);
+				// 断言：请求的参数是否和本地参数完全一致
 				normalizeEnableVisionInConfigMap(merged);
 				cfgManager.saveLaunchConfig(modelId, merged);
 			} catch (Exception ignore) {
