@@ -232,5 +232,24 @@
     "defaultValue": "0",
     "description": "禁用DirectIO，vulkan后端需要禁用这个选项，否则会无法加载模型。",
     "sort": 22
+  },
+  {
+	"name": "禁用Jinja",
+	"fullName": "--no-jinja",
+	"abbreviation": "--no-jinja",
+	"type": "LOGIC",
+	"defaultValue": "0",
+	"description": "是否使用Jinja模板引擎进行聊天（默认启用jinja模板，所以该值为false）",
+	"sort": 23
+  },
+  {
+	"name": "内置聊天模板",
+	"fullName": "--chat-template",
+	"abbreviation": "--chat-template",
+	"type": "STRING",
+	"defaultValue": "",
+	"description": "如果要使用，请将‘禁用Jinja’设置为1，否则目前的llamacpp，是不会让内置聊天模板生效的。默认为空值，即使用模型的内置聊天模板，如果模型的内置模板不准确，则再尝试修改模板。",
+	"values": ["", "bailing", "bailing-think", "bailing2", "chatglm3", "chatglm4", "chatml", "command-r", "deepseek", "deepseek2", "deepseek3", "exaone3", "exaone4", "falcon3", "gemma", "gigachat", "glmedge", "gpt-oss", "granite", "grok-2", "hunyuan-dense", "hunyuan-moe", "kimi-k2", "llama2", "llama2-sys", "llama2-sys-bos", "llama2-sys-strip", "llama3", "llama4", "megrez", "minicpm", "mistral-v1", "mistral-v3", "mistral-v3-tekken", "mistral-v7", "mistral-v7-tekken", "monarch", "openchat", "orion", "pangu-embedded", "phi3", "phi4", "rwkv-world", "seed_oss", "smolvlm", "solar-open", "vicuna", "vicuna-orca", "yandex", "zephyr"],
+	"sort": 24
   }
 ]
