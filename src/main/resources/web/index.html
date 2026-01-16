@@ -1096,6 +1096,7 @@
             document.getElementById('main-model-list').style.display = '';
             document.getElementById('main-llamacpp-setting').style.display = 'none';
             document.getElementById('main-model-path-setting').style.display = 'none';
+            document.getElementById('main-hf').style.display = 'none';
             document.getElementById('main-download').style.display = 'none';
             //refreshModels();
             // 更新导航项高亮
@@ -1110,6 +1111,7 @@
             document.getElementById('main-model-list').style.display = 'none';
             document.getElementById('main-llamacpp-setting').style.display = '';
             document.getElementById('main-model-path-setting').style.display = 'none';
+            document.getElementById('main-hf').style.display = 'none';
             document.getElementById('main-download').style.display = 'none';
             loadLlamaCppList();
             // 更新导航项高亮
@@ -1124,6 +1126,7 @@
             document.getElementById('main-model-list').style.display = 'none';
             document.getElementById('main-llamacpp-setting').style.display = 'none';
             document.getElementById('main-model-path-setting').style.display = '';
+            document.getElementById('main-hf').style.display = 'none';
             document.getElementById('main-download').style.display = 'none';
             loadModelPathList();
             // 更新导航项高亮
@@ -1133,6 +1136,7 @@
             if (nav) nav.classList.add('active');
         }
         
+        // 显示HugginggFace模型页面
         function showHuggingFace() {
             document.getElementById('main-model-list').style.display = 'none';
             document.getElementById('main-llamacpp-setting').style.display = 'none';
@@ -1145,10 +1149,12 @@
             if (nav) nav.classList.add('active');
         }
 
+        // 显示下载管理器
         function showDownloadManager() {
             document.getElementById('main-model-list').style.display = 'none';
             document.getElementById('main-llamacpp-setting').style.display = 'none';
             document.getElementById('main-model-path-setting').style.display = 'none';
+            document.getElementById('main-hf').style.display = '';
             const main = document.getElementById('main-download');
             const hasEntered = main && main.dataset && main.dataset.entered === '1';
             if (main) main.style.display = '';
