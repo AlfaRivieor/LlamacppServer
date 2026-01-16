@@ -83,7 +83,8 @@ public final class VramEstimator {
 		}
 	}
 
-	private record ModelParams(String architecture, long nLayer, long nEmbd, long nHeadKv, long headDim) {
+	private record ModelParams(String architecture, long nLayer, long nEmbd, long nHeadKv, long headDimK, long headDimV,
+			long slidingWindow) {
 	}
 
 	private record ResolvedBundle(File primaryFile, List<File> parts) {
@@ -363,11 +364,33 @@ public final class VramEstimator {
 	private static long estimateKvCacheBytes(ModelParams params, long contextLength, KvCacheType kvTypeK, KvCacheType kvTypeV,
 			long kvLayerCount) {
 		long layers = kvLayerCount > 0 ? kvLayerCount : params.nLayer;
-		if (layers <= 0 || params.nHeadKv <= 0 || params.headDim <= 0) {
+		if (layers <= 0 || params.nHeadKv <= 0 || params.headDimK <= 0 || params.headDimV <= 0) {
 			return 0;
 		}
-		double bytesPerElement = kvTypeK.bytesPerElement() + kvTypeV.bytesPerElement();
-		double bytes = layers * contextLength * params.nHeadKv * params.headDim * bytesPerElement;
+
+		double bytesPerCell = params.nHeadKv
+				* (params.headDimK * kvTypeK.bytesPerElement() + params.headDimV * kvTypeV.bytesPerElement());
+
+		double bytes;
+		if (params.slidingWindow > 0 && contextLength > params.slidingWindow && isGemmaSlidingWindow(params.architecture)) {
+			long globalLayers = estimateGemmaGlobalLayerCount(params.nLayer);
+			if (params.nLayer > 0 && layers != params.nLayer) {
+				double scaled = globalLayers * (layers / (double) params.nLayer);
+				globalLayers = (long) Math.rint(scaled);
+			}
+			if (globalLayers < 0) {
+				globalLayers = 0;
+			}
+			if (globalLayers > layers) {
+				globalLayers = layers;
+			}
+			long swaLayers = layers - globalLayers;
+			long swaCells = estimateGemmaSwaCells(params.slidingWindow, contextLength);
+			bytes = globalLayers * (double) contextLength * bytesPerCell + swaLayers * (double) swaCells * bytesPerCell;
+		} else {
+			bytes = layers * (double) contextLength * bytesPerCell;
+		}
+
 		if (bytes <= 0) {
 			return 0;
 		}
@@ -380,19 +403,40 @@ public final class VramEstimator {
 	private static long estimateRuntimeOverheadBytes(ModelParams params, long contextLength, long kvCacheBytes,
 			boolean flashAttention) {
 		long base = 256L * 1024 * 1024;
-		long flashExtra = 0;
-		if (flashAttention) {
-			long byKv = kvCacheBytes / 20;
-			long byCtx = 0;
-			if (params.nEmbd > 0) {
-				double b = contextLength * (double) params.nEmbd * 2.0;
-				if (b > 0 && b < Long.MAX_VALUE) {
-					byCtx = (long) b;
-				}
+		long byCtx = 0;
+		if (params.nEmbd > 0 && contextLength > 0) {
+			double bytesPerElem = flashAttention ? 8.0 : 4.0;
+			double b = contextLength * (double) params.nEmbd * bytesPerElem;
+			if (b > 0 && b < Long.MAX_VALUE) {
+				byCtx = (long) b;
 			}
-			flashExtra = safeAdd(64L * 1024 * 1024, Math.max(byKv, byCtx));
 		}
-		return safeAdd(base, flashExtra);
+		long byKv = kvCacheBytes > 0 ? kvCacheBytes / 4 : 0;
+		long extra = flashAttention ? 64L * 1024 * 1024 : 0;
+		return safeAdd(base, safeAdd(Math.max(byCtx, byKv), extra));
+	}
+
+	private static boolean isGemmaSlidingWindow(String arch) {
+		if (arch == null || arch.isBlank()) {
+			return false;
+		}
+		String s = arch.trim().toLowerCase(Locale.ROOT);
+		return s.startsWith("gemma");
+	}
+
+	private static long estimateGemmaGlobalLayerCount(long nLayer) {
+		if (nLayer <= 0) {
+			return 0;
+		}
+		return (nLayer + 5) / 6;
+	}
+
+	private static long estimateGemmaSwaCells(long slidingWindow, long contextLength) {
+		if (slidingWindow <= 0) {
+			return contextLength;
+		}
+		long cells = safeAdd(slidingWindow, safeAdd(slidingWindow, slidingWindow));
+		return Math.min(contextLength, cells);
 	}
 
 	private static ResolvedBundle resolveBundle(File input) {
@@ -522,14 +566,23 @@ public final class VramEstimator {
 		}
 
 		long keyLength = firstLong(meta, arch + ".attention.key_length", findKeyBySuffix(meta, ".attention.key_length"));
-		long headDim = 0;
+		long valueLength = firstLong(meta, arch + ".attention.value_length", findKeyBySuffix(meta, ".attention.value_length"));
+		long slidingWindow = firstLong(meta, arch + ".attention.sliding_window", findKeyBySuffix(meta, ".attention.sliding_window"));
+
+		long headDimK = 0;
 		if (keyLength > 0) {
-			headDim = keyLength;
+			headDimK = keyLength;
 		} else if (nEmbd > 0 && nHead > 0) {
-			headDim = nEmbd / nHead;
+			headDimK = nEmbd / nHead;
+		}
+		long headDimV = 0;
+		if (valueLength > 0) {
+			headDimV = valueLength;
+		} else {
+			headDimV = headDimK;
 		}
 
-		return new ModelParams(arch, nLayer, nEmbd, nHeadKv, headDim);
+		return new ModelParams(arch, nLayer, nEmbd, nHeadKv, headDimK, headDimV, slidingWindow);
 	}
 
 	private static long estimateTensorDataBytes(File ggufFile) throws IOException {
