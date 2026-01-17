@@ -90,7 +90,7 @@
     "fullName": "--min-p",
     "abbreviation": "--min-p",
     "type": "FLOAT",
-    "defaultValue": "0.1",
+    "defaultValue": "0.0",
     "description": "最小概率阈值（Min-P）：仅保留概率不低于“当前最可能 token 概率 × P”的 token 作为候选，用于过滤尾部极低概率 token，从而减少怪词/乱码/极端跳跃。P 越大过滤越强、输出越稳，但也更容易变得保守。设置为 0.0 表示禁用。",
     "sort": 9
   },
