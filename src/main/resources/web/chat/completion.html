@@ -1292,7 +1292,9 @@
 
         const link = document.createElement('a');
         link.className = 'attachment-link';
-        link.href = String(a.url);
+
+
+        link.href = String(removeDomainFromUrl(a.url));
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         link.textContent = '打开';
@@ -1317,6 +1319,18 @@
 
       if (!attachmentsEl.childNodes || attachmentsEl.childNodes.length === 0) {
         attachmentsEl.style.display = 'none';
+      }
+    }
+
+    function removeDomainFromUrl(url) {
+      try {
+        const urlObj = new URL(url);
+        // 返回路径、查询参数和哈希部分
+        return urlObj.pathname + urlObj.search + urlObj.hash;
+      } catch (error) {
+        // 如果URL无效，返回原始字符串或处理错误
+        console.error('无效的URL:', error);
+        return url;
       }
     }
 
