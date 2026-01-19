@@ -1002,6 +1002,18 @@
                   <label for="topP">top_p</label>
                   <input id="topP" type="number" value="1" step="0.05" min="0" max="1" />
                 </div>
+                <div class="setting">
+                  <label for="minP">min_p</label>
+                  <input id="minP" type="number" step="0.01" min="0" max="1" value="0.05" />
+                </div>
+                <div class="setting">
+                  <label for="repeatPenalty">repeat_penalty</label>
+                  <input id="repeatPenalty" type="number" step="0.05" min="0" max="10" value="1.0" />
+                </div>
+                <div class="long-setting">
+                  <label for="stopSequences">stop</label>
+                  <textarea id="stopSequences" placeholder="一行一个 stop 序列；留空表示使用内置默认 stop"></textarea>
+                </div>
               </div>
 
               <div class="settings-center">
@@ -1153,6 +1165,9 @@
       maxTokens: document.getElementById('maxTokens'),
       temperature: document.getElementById('temperature'),
       topP: document.getElementById('topP'),
+      minP: document.getElementById('minP'),
+      repeatPenalty: document.getElementById('repeatPenalty'),
+      stopSequences: document.getElementById('stopSequences'),
       userName: document.getElementById('userName'),
       userPrefix: document.getElementById('userPrefix'),
       userSuffix: document.getElementById('userSuffix'),
@@ -1886,10 +1901,24 @@
     }
 
     function currentParams() {
+      const rawMinP = String(els.minP.value || '').trim();
+      const rawRepeatPenalty = String(els.repeatPenalty.value || '').trim();
+      const stopLines = String(els.stopSequences.value || '')
+        .split(/\r?\n/)
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      const min_p = rawMinP ? Number(rawMinP) : undefined;
+      const repeat_penalty = rawRepeatPenalty ? Number(rawRepeatPenalty) : undefined;
+      const stop = stopLines.length ? stopLines : undefined;
+
       return {
         max_tokens: Number(els.maxTokens.value || 1024),
         temperature: Number(els.temperature.value || 0.7),
-        top_p: Number(els.topP.value || 1)
+        top_p: Number(els.topP.value || 1),
+        min_p: (Number.isFinite(min_p) ? min_p : undefined),
+        repeat_penalty: (Number.isFinite(repeat_penalty) ? repeat_penalty : undefined),
+        stop
       };
     }
 
@@ -1906,6 +1935,9 @@
         const isChat = state.apiModel === 1;
         const useStream = !!els.streamToggle.checked;
         const url = isChat ? '/v1/chat/completions' : '/v1/completions';
+        const stop = (params.stop != null
+          ? params.stop
+          : (isChat ? ["<|endoftext|>"] : ['\n' + getUserSpeakerName(), '\n***']));
         const body = isChat
           ? {
             model,
@@ -1913,9 +1945,11 @@
             max_tokens: params.max_tokens,
             temperature: params.temperature,
             top_p: params.top_p,
+            min_p: params.min_p,
+            repeat_penalty: params.repeat_penalty,
             enable_thinking: !!els.thinkingToggle.checked,
             stream: useStream, 
-            stop: ["<|endoftext|>"]
+            stop
           }
           : {
             model,
@@ -1923,9 +1957,11 @@
             max_tokens: params.max_tokens,
             temperature: params.temperature,
             top_p: params.top_p,
+            min_p: params.min_p,
+            repeat_penalty: params.repeat_penalty,
             enable_thinking: !!els.thinkingToggle.checked,
             stream: useStream,
-            stop: ['\n' + getUserSpeakerName(), '\n***']
+            stop
           };
 
         const res = await fetch(url, {
@@ -2262,6 +2298,14 @@
       if (ext?.params?.max_tokens != null) els.maxTokens.value = String(ext.params.max_tokens);
       if (ext?.params?.temperature != null) els.temperature.value = String(ext.params.temperature);
       if (ext?.params?.top_p != null) els.topP.value = String(ext.params.top_p);
+      els.minP.value = '';
+      els.repeatPenalty.value = '';
+      els.stopSequences.value = '';
+      if (ext?.params?.min_p != null) els.minP.value = String(ext.params.min_p);
+      if (ext?.params?.repeat_penalty != null) els.repeatPenalty.value = String(ext.params.repeat_penalty);
+      const stopVal = ext?.params?.stop;
+      if (Array.isArray(stopVal)) els.stopSequences.value = stopVal.map(s => String(s)).join('\n');
+      else if (typeof stopVal === 'string') els.stopSequences.value = stopVal;
       if (ext?.enableThinking != null) els.thinkingToggle.checked = !!ext.enableThinking;
       else els.thinkingToggle.checked = true;
 
@@ -2445,6 +2489,9 @@
       els.maxTokens.addEventListener('input', () => scheduleSave('参数'));
       els.temperature.addEventListener('input', () => scheduleSave('参数'));
       els.topP.addEventListener('input', () => scheduleSave('参数'));
+      els.minP.addEventListener('input', () => scheduleSave('参数'));
+      els.repeatPenalty.addEventListener('input', () => scheduleSave('参数'));
+      els.stopSequences.addEventListener('input', () => scheduleSave('参数'));
       els.thinkingToggle.addEventListener('change', () => scheduleSave('思考开关'));
 
       // KV缓存按钮事件
