@@ -26,8 +26,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import org.mark.llamacpp.gguf.GGUFBundle;
@@ -37,6 +35,7 @@ import org.mark.llamacpp.server.struct.ApiResponse;
 import org.mark.llamacpp.server.struct.ModelPathConfig;
 import org.mark.llamacpp.server.struct.ModelPathDataStruct;
 import org.mark.llamacpp.server.tools.CommandLineRunner;
+import org.mark.llamacpp.server.tools.ParamTool;
 import org.mark.llamacpp.server.tools.PortChecker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -472,64 +471,25 @@ public class LlamaServerManager {
 		}
 	}
 	
-//	/**
-//	 * 异步加载指定的模型
-//	 *
-//	 * @param modelId 模型ID
-//	 * @param ctxSize 上下文大小
-//	 * @param batchSize 批处理大小
-//	 * @param ubatchSize 微批处理大小
-//	 * @param noMmap 是否禁用内存映射
-//	 * @param mlock 是否锁定内存
-//	 * @return 是否成功启动加载任务
-//	 */
-//    public synchronized boolean loadModelAsync(String modelId, ModelLaunchOptions options) {
-//
-//        Map<String, Object> launchConfig = options.toConfigMap();
-//        this.configManager.saveLaunchConfig(modelId, launchConfig);
-//		
-//		// 检查模型是否已经加载
-//		if (this.loadedProcesses.containsKey(modelId)) {
-//			System.err.println("模型 " + modelId + " 已经加载");
-//			// 发送WebSocket事件通知模型已加载
-//			LlamaServer.sendModelLoadEvent(modelId, false, "模型已经加载");
-//			return false;
-//		}
-//		
-//		// 查找指定的模型
-//		GGUFModel targetModel = this.findModelById(modelId);
-//		
-//        if (targetModel == null) {
-//            System.err.println("未找到ID为 " + modelId + " 的模型");
-//            // 发送WebSocket事件通知模型未找到
-//            LlamaServer.sendModelLoadEvent(modelId, false, "未找到ID为 " + modelId + " 的模型");
-//            return false;
-//        }
-//
-//        if (options.llamaBinPath == null || options.llamaBinPath.trim().isEmpty()) {
-//            LlamaServer.sendModelLoadEvent(modelId, false, "未提供llamaBinPath");
-//            return false;
-//        }
-//		// 如果这个模型已经在加载中 
-//		synchronized (this.loadingModels) {
-//			if(this.loadingModels.contains(targetModel.getModelId())) {
-//				LlamaServer.sendModelLoadEvent(modelId, false, "该模型正在加载中");
-//				return false;
-//			}
-//		}
-//        this.executorService.submit(() -> {
-//            this.loadModelInBackground(modelId, targetModel, options);
-//        });
-//		
-//		return true; // 表示成功提交加载任务
-//	}
-
-	public synchronized boolean loadModelAsyncFromCmd(String modelId, String llamaBinPath, List<String> device, Integer mg, String cmd, String chatTemplateFilePath) {
+	/**
+	 * 	通过CMD命令启动llama-server进程
+	 * @param modelId
+	 * @param llamaBinPath
+	 * @param device
+	 * @param mg
+	 * @param enbaleVision
+	 * @param cmd
+	 * @param chatTemplateFilePath
+	 * @return
+	 */
+	public synchronized boolean loadModelAsyncFromCmd(String modelId, String llamaBinPath, List<String> device, Integer mg, boolean enbaleVision, String cmd, String chatTemplateFilePath) {
 		Map<String, Object> launchConfig = new HashMap<>();
 		launchConfig.put("llamaBinPath", llamaBinPath);
 		launchConfig.put("device", device);
 		launchConfig.put("mg", mg);
 		launchConfig.put("cmd", cmd);
+		launchConfig.put("enableVision", enbaleVision);
+		
 		if (chatTemplateFilePath != null && !chatTemplateFilePath.trim().isEmpty()) {
 			launchConfig.put("chatTemplateFile", chatTemplateFilePath);
 		}
@@ -565,7 +525,7 @@ public class LlamaServerManager {
 		final String chatTemplateFileSafe = chatTemplateFilePath == null ? "" : chatTemplateFilePath;
 
 		this.executorService.submit(() -> {
-			this.loadModelInBackgroundFromCmd(modelId, targetModel, binSafe, devSafe, mgSafe, cmdSafe, chatTemplateFileSafe);
+			this.loadModelInBackgroundFromCmd(modelId, targetModel, binSafe, devSafe, mgSafe, enbaleVision, cmdSafe, chatTemplateFileSafe);
 		});
 		return true;
 	}
@@ -697,11 +657,23 @@ public class LlamaServerManager {
 //		}
 //	}
 
+	
+	/**
+	 * 	后台启动llama-server进程。
+	 * @param modelId
+	 * @param targetModel
+	 * @param llamaBinPath
+	 * @param device
+	 * @param mg
+	 * @param enableVision
+	 * @param cmd
+	 * @param chatTemplateFilePath
+	 */
 	private synchronized void loadModelInBackgroundFromCmd(String modelId, GGUFModel targetModel, String llamaBinPath, List<String> device,
-			Integer mg, String cmd, String chatTemplateFilePath) {
+			Integer mg, boolean enableVision, String cmd, String chatTemplateFilePath) {
 		int port = this.getNextAvailablePort();
 
-		String commandStr = buildCommandStr(targetModel, port, llamaBinPath, device, mg, cmd, chatTemplateFilePath);
+		String commandStr = buildCommandStr(targetModel, port, llamaBinPath, device, mg, enableVision, cmd, chatTemplateFilePath);
 
 		String processName = "llama-server-" + modelId;
 		LlamaCppProcess process = new LlamaCppProcess(processName, commandStr);
@@ -773,37 +745,51 @@ public class LlamaServerManager {
 			}
 		}
 	}
-
-	private static String buildCommandStr(GGUFModel targetModel, int port, String llamaBinPath, List<String> device, Integer mg, String cmd, String chatTemplateFilePath) {
+	
+	/**
+	 * 	
+	 * @param targetModel
+	 * @param port
+	 * @param llamaBinPath
+	 * @param device
+	 * @param mg
+	 * @param cmd
+	 * @param chatTemplateFilePath
+	 * @return
+	 */
+	private String buildCommandStr(GGUFModel targetModel, int port, String llamaBinPath, List<String> device, Integer mg, boolean enableVision, String cmd, String chatTemplateFilePath) {
 		StringBuilder sb = new StringBuilder();
 
 		String exe = llamaBinPath + File.separator + "llama-server";
-		sb.append(quoteIfNeeded(exe));
+		sb.append(ParamTool.quoteIfNeeded(exe));
 
 		sb.append(" -m ");
 		String modelFile = targetModel.getPath() + "/" + targetModel.getPrimaryModel().getFileName();
-		sb.append(quoteIfNeeded(modelFile));
+		sb.append(ParamTool.quoteIfNeeded(modelFile));
 
 		sb.append(" --port ");
 		sb.append(port);
-
-		if (targetModel.getMmproj() != null && !cmdHasFlag(cmd, "--mmproj") && !cmdHasFlag(cmd, "--no-mmproj")) {
-			sb.append(" --mmproj ");
-			String mmprojFile = targetModel.getPath() + "/" + targetModel.getMmproj().getFileName();
-			sb.append(quoteIfNeeded(mmprojFile));
+		
+		//	确认启用视觉
+		if(enableVision) {
+			if (targetModel.getMmproj() != null && !cmdHasFlag(cmd, "--mmproj") && !cmdHasFlag(cmd, "--no-mmproj")) {
+				sb.append(" --mmproj ");
+				String mmprojFile = targetModel.getPath() + "/" + targetModel.getMmproj().getFileName();
+				sb.append(ParamTool.quoteIfNeeded(mmprojFile));
+			}	
 		}
 
 		if (device != null && !device.isEmpty()) {
 			if (device.size() == 1) {
 				if (!"All".equals(device.get(0))) {
 					sb.append(" -sm none -dev ");
-					sb.append(quoteIfNeeded(device.get(0)));
+					sb.append(ParamTool.quoteIfNeeded(device.get(0)));
 					sb.append(" -mg ");
 					sb.append(mg != null ? String.valueOf(mg) : "0");
 				}
 			} else {
 				sb.append(" -dev ");
-				sb.append(quoteIfNeeded(String.join(",", device)));
+				sb.append(ParamTool.quoteIfNeeded(String.join(",", device)));
 			}
 		}
 
@@ -813,7 +799,7 @@ public class LlamaServerManager {
 		}
 		if (chatTemplateFilePath != null && !chatTemplateFilePath.trim().isEmpty() && !cmdHasFlag(cmd, "--chat-template-file") && !cmdHasFlag(cmd, "--chat-template")) {
 			sb.append(" --chat-template-file ");
-			sb.append(quoteIfNeeded(chatTemplateFilePath.trim()));
+			sb.append(ParamTool.quoteIfNeeded(chatTemplateFilePath.trim()));
 		}
 
 		if (!cmdHasFlag(cmd, "--no-webui") && !cmdHasFlag(cmd, "--webui")) {
@@ -824,7 +810,7 @@ public class LlamaServerManager {
 		}
 		if (!cmdHasFlag(cmd, "--slot-save-path")) {
 			sb.append(" --slot-save-path ");
-			sb.append(quoteIfNeeded(LlamaServer.getCachePath().toFile().getAbsolutePath()));
+			sb.append(ParamTool.quoteIfNeeded(LlamaServer.getCachePath().toFile().getAbsolutePath()));
 		}
 		if (!cmdHasFlag(cmd, "--cache-ram")) {
 			sb.append(" --cache-ram -1");
@@ -833,32 +819,19 @@ public class LlamaServerManager {
 		return sb.toString().trim();
 	}
 
-	private static boolean cmdHasFlag(String cmd, String flag) {
+	/**
+	 * 	判断是否包含某个字段。
+	 * @param cmd
+	 * @param flag
+	 * @return
+	 */
+	private boolean cmdHasFlag(String cmd, String flag) {
 		if (cmd == null || flag == null || flag.trim().isEmpty()) {
 			return false;
 		}
 		String f = flag.trim();
 		String s = " " + cmd.trim() + " ";
 		return s.contains(" " + f + " ") || s.contains(" " + f + "=");
-	}
-
-	private static String quoteIfNeeded(String s) {
-		if (s == null) {
-			return "";
-		}
-		String t = s;
-		boolean needs = false;
-		for (int i = 0; i < t.length(); i++) {
-			char c = t.charAt(i);
-			if (Character.isWhitespace(c) || c == '"') {
-				needs = true;
-				break;
-			}
-		}
-		if (!needs) {
-			return t;
-		}
-		return "\"" + t.replace("\"", "\\\"") + "\"";
 	}
 	
 	//##########################################################################################
@@ -1107,10 +1080,11 @@ public class LlamaServerManager {
 	 * 	用户估算显存。
 	 * @param llamaBinPath
 	 * @param modelId
+	 * @param enableVision
 	 * @param cmd
 	 * @return
 	 */
-	public String handleFitParam(String llamaBinPath, String modelId, List<String> cmd) {
+	public String handleFitParam(String llamaBinPath, String modelId, boolean enableVision, List<String> cmd) {
 		String[] keysParam = {"--ctx-size", "--flash-attn", "--batch-size", "--ubatch-size", "--parallel", "--kv-unified", "--cache-type-k", "--cache-type-v"};
 		Map<String, String> cmdMap = new HashMap<>();
 		for(int i = 0; i < cmd.size(); i++) {
@@ -1143,18 +1117,18 @@ public class LlamaServerManager {
 				}
 			}
 		}
+		// 这部分代码是错误的，但是还是留在这里吧。
+//		// 如果启用视觉模块
+//		if(enableVision) {
+//			command += " --mmproj ";
+//			String mmprojFile = model.getPath() + "/" + model.getMmproj().getFileName();
+//			command += ParamTool.quoteIfNeeded(mmprojFile);
+//		}
 		
 		// 执行命令
 		CommandLineRunner.CommandResult result = CommandLineRunner.execute(command, 30);
 		String output = result.getError();
-		// 提取第一个数值
-		Pattern numberPattern = Pattern.compile("llama_params_fit_impl: projected to use (\\d+) MiB");
-		Matcher numberMatcher = numberPattern.matcher(output);
-		if (numberMatcher.find()) {
-		    String value = numberMatcher.group(1);
-		    return value;
-		}
-		return null;
+		return output;
 	}
 	
 	

@@ -574,6 +574,7 @@ function submitModelAction() {
 
 function submitLoadModel() { submitModelAction(); }
 
+// 估算显存的功能
 function estimateVramAction() {
     const modal = getLoadModelModal();
     const payload = buildLoadModelPayload(modal);
@@ -582,6 +583,8 @@ function estimateVramAction() {
         showToast('错误', '请先选择模型', 'error');
         return;
     }
+    const hint = findById(modal, 'ctxSizeVramHint');
+    if (hint) hint.textContent = '正在计算……';
 
     const llamaBinPathSelect = payload && payload.llamaBinPathSelect ? String(payload.llamaBinPathSelect).trim() : '';
     const cmd = payload && payload.cmd ? String(payload.cmd).trim() : '';
@@ -603,11 +606,13 @@ function estimateVramAction() {
             const vram = res.data && res.data.vram !== undefined && res.data.vram !== null ? String(res.data.vram).trim() : '';
             if (vram) {
                 const text = `预计显存：${vram} MiB`;
-                const hint = findById(modal, 'ctxSizeVramHint');
                 if (hint) hint.textContent = text;
-            } else {
-                showToast('错误', '返回数据格式不正确', 'error');
-            }
+            } else if(res.data.message) {
+				showToast('错误', '估算错误', 'error');
+				if (hint) hint.textContent = res.data.message;
+            } else{
+				showToast('错误', '返回数据格式不正确', 'error');
+			}
         } else {
             showToast('错误', (res && res.error) ? res.error : '估算失败', 'error');
         }

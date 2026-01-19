@@ -1,14 +1,43 @@
 package org.mark.llamacpp.server.tools;
 
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 public class JsonUtil {
+	
+	
+	private static final Gson gson = new Gson();
+	
+	
+	public static String toJson(Object obj) {
+		return gson.toJson(obj);
+	}
+	
+	
+	public static <T> T fromJson(String json, Class<T> type) {
+		return gson.fromJson(json, type);
+	}
+	
+	
+	public static <T> T fromJson(String json, Type type) {
+		return gson.fromJson(json, type);
+	}
+	
+	public static <T> T fromJson(JsonElement json, Class<T> type) {
+		return gson.fromJson(json, type);
+	}
+	
+	public static <T> T fromJson(JsonElement json, Type type) {
+		return gson.fromJson(json, type);
+	}
+	
 	
 	public static String getJsonString(JsonObject o, String key, String fallback) {
 		if (o == null || key == null || !o.has(key) || o.get(key) == null || o.get(key).isJsonNull())
