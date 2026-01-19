@@ -73,11 +73,14 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 
 		// 处理模型API请求
 		if (uri.startsWith("/api/") || uri.startsWith("/v1") || uri.startsWith("/session")) {
+			boolean result = false;
 			for(BaseController c : pipeline) {
-				boolean result = c.handleRequest(uri, ctx, request);
+				result = c.handleRequest(uri, ctx, request);
 				if(result)
 					break;
 			}
+			// 如果一直是false
+			ctx.fireChannelRead(request.retain());
 			return;
 		}
 
