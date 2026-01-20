@@ -27,7 +27,6 @@ import org.slf4j.LoggerFactory;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.util.ReferenceCountUtil;
@@ -90,14 +89,6 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			ctx.close();
 			return;
 		}
-		
-		if (uri.startsWith("/v1") && request.method() != HttpMethod.OPTIONS) {
-			if (!this.validateApiKey(request)) {
-				LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.UNAUTHORIZED, "invalid api key");
-				return;
-			}
-		}
-
 		try {
 			// 处理模型API请求
 			if (this.isApiRequest(uri)) {
@@ -172,27 +163,5 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 	 */
 	private boolean isApiRequest(String uri) {
 		return uri != null && (uri.startsWith("/api/") || uri.startsWith("/v1") || uri.startsWith("/session"));
-	}
-	
-	/**
-	 * 	做判断
-	 * @param request
-	 * @return
-	 */
-	private boolean validateApiKey(FullHttpRequest request) {
-		if (!LlamaServer.isApiKeyValidationEnabled()) {
-			return true;
-		}
-		String expected = LlamaServer.getApiKey();
-		if (expected == null || expected.isBlank()) {
-			return false;
-		}
-		String auth = request.headers().get(HttpHeaderNames.AUTHORIZATION);
-		if(auth == null)
-			return false;
-		// 去掉Bearer 
-		auth = auth.replace("Bearer ", "");
-		// 
-		return auth.equals(LlamaServer.getApiKey());
 	}
 }

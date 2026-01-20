@@ -8,6 +8,7 @@ import io.netty.handler.codec.http.*;
 import io.netty.util.CharsetUtil;
 import io.netty.util.ReferenceCountUtil;
 
+import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.service.OpenAIService;
 import org.mark.llamacpp.server.struct.ApiResponse;
 import org.mark.llamacpp.server.tools.JsonUtil;
@@ -64,7 +65,15 @@ public class OpenAIRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 	 * 处理API请求
 	 */
     private void handleApiRequest(ChannelHandlerContext ctx, FullHttpRequest request, String uri) {
-    		try {
+		try {
+			// 验证key
+			if (uri.startsWith("/v1") && request.method() != HttpMethod.OPTIONS) {
+				if (!this.validateApiKey(request)) {
+					LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.UNAUTHORIZED, "invalid api key");
+					return;
+				}
+			}
+			
 			// OpenAI API 端点
 			// 获取模型列表
 			if (uri.startsWith("/v1/models")) {
@@ -85,11 +94,11 @@ public class OpenAIRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 				this.openAIServerHandler.handleOpenAIEmbeddingsRequest(ctx, request);
 				return;
 			}
-            this.sendJsonResponse(ctx, ApiResponse.error("404 Not Found"));
-        } catch (Exception e) {
-            logger.error("处理API请求时发生错误", e);
-            this.sendJsonResponse(ctx, ApiResponse.error("服务器内部错误"));
-        }
+			this.sendJsonResponse(ctx, ApiResponse.error("404 Not Found"));
+		} catch (Exception e) {
+			logger.error("处理API请求时发生错误", e);
+			this.sendJsonResponse(ctx, ApiResponse.error("服务器内部错误"));
+		}
     }
     
     /**
@@ -148,5 +157,27 @@ public class OpenAIRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
 		logger.error("处理请求时发生异常", cause);
 		ctx.close();
+	}
+	
+	/**
+	 * 	做判断
+	 * @param request
+	 * @return
+	 */
+	private boolean validateApiKey(FullHttpRequest request) {
+		if (!LlamaServer.isApiKeyValidationEnabled()) {
+			return true;
+		}
+		String expected = LlamaServer.getApiKey();
+		if (expected == null || expected.isBlank()) {
+			return false;
+		}
+		String auth = request.headers().get(HttpHeaderNames.AUTHORIZATION);
+		if(auth == null)
+			return false;
+		// 去掉Bearer 
+		auth = auth.replace("Bearer ", "");
+		// 
+		return auth.equals(LlamaServer.getApiKey());
 	}
 }
