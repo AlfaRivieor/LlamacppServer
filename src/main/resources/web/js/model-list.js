@@ -64,6 +64,9 @@ function getModelIcon(architecture) {
         'kimi': 'icon/kimi.png',
         'minimax': 'icon/minimax.png',
         'gemma': 'icon/gemma.png',
+		'deepseek': 'icon/deepseek.png',
+		'deepseek2': 'icon/deepseek.png',
+		'deepseek3': 'icon/deepseek.png',
     };
     for (const [key, icon] of Object.entries(iconMap)) {
         if (archName.includes(key)) return icon;
