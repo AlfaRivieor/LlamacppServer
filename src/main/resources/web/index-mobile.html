@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Llama.cpp 模型管理系统 - 移动端</title>
+    <link rel="stylesheet" href="css/all.min.css">
+    <link href="css/css2.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/index.css">
+    <style>
+        body { display: block; height: 100vh; height: 100dvh; overflow: hidden; }
+        .mobile-main { height: 100vh; height: 100dvh; background: var(--bg-color); }
+        .mobile-top { height: auto; padding: 0.75rem 1rem; gap: 0.75rem; flex-direction: column; align-items: stretch; }
+        .mobile-title-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+        .mobile-controls { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+        .mobile-controls .search-box { width: 100%; }
+        .mobile-controls .search-input { width: 100%; }
+        .mobile-controls select { width: 100%; }
+        .mobile-counts { display: flex; gap: 0.75rem; font-size: 0.85rem; color: var(--text-secondary); }
+        .mobile-counts strong { color: var(--text-primary); }
+        .content-scrollable { padding: 0.75rem 1rem 1.5rem; min-height: 0; }
+        .model-list-container { border-radius: 0.75rem; }
+        .model-item { padding: 0.9rem 1rem; align-items: flex-start; flex-wrap: nowrap; gap: 0.75rem; }
+        .model-icon-wrapper { margin-right: 0; }
+        .model-details { min-width: 0; margin-right: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+        .model-name { margin-bottom: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .model-mobile-actions { display: flex; align-items: center; gap: 0.5rem; width: 100%; }
+        .model-meta { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; }
+        .model-mobile-meta { flex-wrap: nowrap; overflow: hidden; }
+        .model-mobile-meta span { white-space: nowrap; }
+        .model-mobile-meta .model-arch { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+        .mobile-action-btn { margin-left: auto; }
+        .mobile-action-modal { max-width: 520px; }
+        .mobile-action-info { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.75rem; line-height: 1.4; }
+        .mobile-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+        .mobile-action-grid .btn { width: 100%; justify-content: center; }
+        #loadModelModal .modal-content {
+            width: 100vw;
+            height: 100vh;
+            max-width: none;
+            max-height: none;
+            border-radius: 0;
+        }
+        #modelBenchmarkCompareModal .modal-content {
+            width: 100vw;
+            height: 100vh;
+            max-width: none;
+            max-height: none;
+            border-radius: 0;
+        }
+        #modelBenchmarkCompareModal .modal-body {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        #modelBenchmarkCompareModal .modal-body > div {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        #modelBenchmarkCompareModal .modal-body > div > div:first-child {
+            width: 100%;
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        #modelBenchmarkCompareModal .modal-body > div > div:first-child > div:last-child {
+            flex: 1;
+            min-height: 0;
+            overflow: auto;
+            max-height: none !important;
+        }
+        #modelBenchmarkCompareModal .modal-body > div > div:last-child {
+            width: 100%;
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        #modelBenchmarkCompareModal .modal-body > div > div:last-child > pre {
+            flex: 1;
+            min-height: 0;
+            max-height: none !important;
+        }
+        #mobileHfGgufModal .modal-content,
+        #mobileDownloadCreateModal .modal-content,
+        #mobileDownloadSettingsModal .modal-content,
+        #mobileLlamaCppEditModal .modal-content,
+        #mobileModelPathEditModal .modal-content,
+        #consoleModal .modal-content {
+            width: 100vw;
+            height: 100vh;
+            max-width: none;
+            max-height: none;
+            border-radius: 0;
+        }
+        .mobile-bottom-nav {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            padding: 0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
+            background: rgba(255, 255, 255, 0.92);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 0.5rem;
+            z-index: 900;
+            backdrop-filter: blur(10px);
+        }
+        .mobile-bottom-nav .btn {
+            border-radius: 0.75rem;
+            padding: 0.65rem 0.75rem;
+            font-size: 0.9rem;
+        }
+        .mobile-bottom-nav .btn.active {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: #fff;
+        }
+        @media (max-width: 480px) {
+            .mobile-action-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <main class="main-area mobile-main" id="mobileMainModels">
+        <div class="top-bar mobile-top">
+            <div class="mobile-title-row">
+                <h1 class="page-title">模型列表</h1>
+                <div style="display:flex; gap: 0.5rem;">
+                    <button class="btn btn-secondary" id="mobileChatBtn" title="聊天界面" onclick="window.open('chat/completion-mobile.html', '_blank')">
+                        <i class="fas fa-comments"></i>
+                    </button>
+                    <button class="btn btn-secondary" id="mobileStressTestBtn" title="压力测试" onclick="window.open('chat/concurrency.html', '_blank')">
+                        <i class="fas fa-bolt"></i>
+                    </button>
+                    <button class="btn btn-secondary" onclick="refreshModels()" title="刷新列表">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="mobile-controls">
+                <div class="search-box">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="modelSearchInput" class="search-input" placeholder="搜索模型...">
+                </div>
+                <select id="modelSortSelect" class="form-control" onchange="sortAndRenderModels()">
+                    <option value="name_asc">名称 (A-Z)</option>
+                    <option value="name_desc">名称 (Z-A)</option>
+                    <option value="size_asc">文件大小 (小到大)</option>
+                    <option value="size_desc">文件大小 (大到小)</option>
+                    <option value="params_asc">参数量 (小到大)</option>
+                    <option value="params_desc">参数量 (大到小)</option>
+                </select>
+            </div>
+            <div class="mobile-counts">
+                <span>已加载 <strong id="loadedModelsCount">0</strong></span>
+                <span>总数 <strong id="totalModelsCount">0</strong></span>
+            </div>
+        </div>
+
+        <div class="content-scrollable">
+            <div class="model-list-container">
+                <div id="modelsList">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <main class="main-area mobile-main" id="mobileMainHf" style="display:none;">
+        <div class="top-bar mobile-top">
+            <div class="mobile-title-row">
+                <h1 class="page-title">HF 模型</h1>
+                <button class="btn btn-secondary" id="mobileHfSearchBtn" title="搜索">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+            <div class="mobile-controls">
+                <div class="search-box">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="mobileHfQueryInput" class="search-input" placeholder="搜索 GGUF（例如：Qwen 7B）">
+                </div>
+                <select id="mobileHfBaseSelect" class="form-control">
+                    <option value="mirror" selected>hf-mirror.com</option>
+                    <option value="official">huggingface.co</option>
+                </select>
+                <select id="mobileHfLimitSelect" class="form-control">
+                    <option value="30" selected>30</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+        </div>
+        <div class="content-scrollable" style="padding-bottom: 5rem;">
+            <div class="model-list-container">
+                <div id="mobileHfHits">
+                    <div class="empty-state">
+                        <div class="empty-state-icon"><i class="fas fa-search"></i></div>
+                        <div class="empty-state-title">搜索 HuggingFace</div>
+                        <div class="empty-state-text">输入关键字后点击右上角搜索</div>
+                    </div>
+                </div>
+                <div id="mobileHfMore" style="display:none; padding: 0.75rem;">
+                    <button class="btn btn-secondary" id="mobileHfMoreBtn" style="width: 100%; justify-content: center;">加载更多</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <main class="main-area mobile-main" id="mobileMainDownload" style="display:none;">
+        <div class="top-bar mobile-top">
+            <div class="mobile-title-row">
+                <h1 class="page-title">下载</h1>
+                <div style="display:flex; gap: 0.5rem;">
+                    <button class="btn btn-secondary" id="mobileDownloadSettingsBtn" style="display: none;" title="设置">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <button class="btn btn-secondary" id="mobileDownloadRefreshBtn" title="刷新">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="mobile-counts">
+                <span>下载中 <strong id="mobileDownloadsActiveCount">0</strong></span>
+                <span>等待 <strong id="mobileDownloadsPendingCount">0</strong></span>
+                <span>完成 <strong id="mobileDownloadsDoneCount">0</strong></span>
+            </div>
+            <div style="display:flex; gap:0.75rem;">
+                <button class="btn btn-primary" id="mobileDownloadCreateBtn" style="flex:1; justify-content:center; display: none;">
+                    <i class="fas fa-plus"></i> 新建任务
+                </button>
+            </div>
+        </div>
+        <div class="content-scrollable" style="padding-bottom: 5rem;">
+            <div class="model-list-container">
+                <div id="mobileDownloadsList">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <main class="main-area mobile-main" id="mobileMainSettings" style="display:none;">
+        <div class="top-bar mobile-top">
+            <div class="mobile-title-row">
+                <h1 class="page-title">设置</h1>
+            </div>
+            <div class="mobile-counts">
+                <span style="color: var(--text-secondary);">管理运行环境与路径配置</span>
+            </div>
+        </div>
+        <div class="content-scrollable" style="padding-bottom: 5rem;">
+            <div class="model-list-container">
+                <div style="padding: 0.75rem; display:flex; flex-direction:column; gap: 0.75rem;">
+                    <button class="btn btn-secondary" id="mobileSettingsLlamaCppBtn" style="width:100%; justify-content:space-between;">
+                        <span style="display:flex; align-items:center; gap: 0.5rem;"><i class="fas fa-microchip"></i> Llama.cpp 路径</span>
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <button class="btn btn-secondary" id="mobileSettingsModelPathBtn" style="width:100%; justify-content:space-between;">
+                        <span style="display:flex; align-items:center; gap: 0.5rem;"><i class="fas fa-folder-open"></i> 模型目录</span>
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <button class="btn btn-secondary" id="mobileSettingsConsoleBtn" style="width:100%; justify-content:space-between;">
+                        <span style="display:flex; align-items:center; gap: 0.5rem;"><i class="fas fa-terminal"></i> 控制台日志</span>
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <button class="btn btn-secondary" id="mobileSettingsShutdownBtn" style="width:100%; justify-content:center; border-color: rgba(239,68,68,0.35); color: rgb(239,68,68);">
+                        <i class="fas fa-power-off"></i> 停止服务
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <main class="main-area mobile-main" id="mobileMainLlamaCpp" style="display:none;">
+        <div class="top-bar mobile-top">
+            <div class="mobile-title-row">
+                <button class="btn btn-secondary" id="mobileLlamaCppBackBtn" title="返回">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <h1 class="page-title" style="flex:1;">Llama.cpp</h1>
+                <div style="display:flex; gap: 0.5rem;">
+                    <button class="btn btn-secondary" id="mobileLlamaCppRefreshBtn" title="刷新">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="btn btn-primary" id="mobileLlamaCppAddBtn" title="添加">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="mobile-counts">
+                <span>已配置 <strong id="mobileLlamaCppCount">0</strong></span>
+            </div>
+        </div>
+        <div class="content-scrollable" style="padding-bottom: 5rem;">
+            <div class="model-list-container">
+                <div id="mobileLlamaCppList">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <main class="main-area mobile-main" id="mobileMainModelPaths" style="display:none;">
+        <div class="top-bar mobile-top">
+            <div class="mobile-title-row">
+                <button class="btn btn-secondary" id="mobileModelPathBackBtn" title="返回">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <h1 class="page-title" style="flex:1;">模型目录</h1>
+                <div style="display:flex; gap: 0.5rem;">
+                    <button class="btn btn-secondary" id="mobileModelPathRefreshBtn" title="刷新">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="btn btn-primary" id="mobileModelPathAddBtn" title="添加">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="mobile-counts">
+                <span>已配置 <strong id="mobileModelPathCount">0</strong></span>
+            </div>
+        </div>
+        <div class="content-scrollable" style="padding-bottom: 5rem;">
+            <div class="model-list-container">
+                <div id="mobileModelPathList">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal" id="modelActionsModal">
+        <div class="modal-content mobile-action-modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modelActionsTitle">模型操作</h3>
+                <button class="modal-close" onclick="closeModal('modelActionsModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="mobile-action-info" id="modelActionsInfo"></div>
+                <div class="mobile-action-grid" id="modelActionsButtons"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modelActionsModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="mobileHfGgufModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-file"></i> <span id="mobileHfGgufTitle">GGUF</span></h3>
+                <button class="modal-close" onclick="closeModal('mobileHfGgufModal')">&times;</button>
+            </div>
+            <div class="modal-body" style="overflow: hidden; display:flex; flex-direction:column; min-height:0;">
+                <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom: 0.75rem;">
+                    <div id="mobileHfGgufRepo" style="font-size: 0.875rem; color: var(--text-secondary); font-weight: 700; overflow:hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
+                    <button class="btn btn-secondary btn-sm" id="mobileHfCopyAllBtn" style="margin-left:auto;">
+                        <i class="fas fa-copy"></i> 复制全部
+                    </button>
+                </div>
+                <div id="mobileHfGgufList" style="flex:1; min-height:0; overflow:auto;">
+                    <div class="loading-spinner"><div class="spinner"></div></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('mobileHfGgufModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="mobileDownloadCreateModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-download"></i> 新建下载</h3>
+                <button class="modal-close" onclick="closeModal('mobileDownloadCreateModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="mobileDownloadCreateForm">
+                    <div class="form-group">
+                        <label class="form-label" for="mobileDownloadUrlInput">下载URL</label>
+                        <input type="url" class="form-control" id="mobileDownloadUrlInput" placeholder="https://example.com/file.gguf" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="mobileDownloadPathInput">保存路径</label>
+                        <input type="text" class="form-control" id="mobileDownloadPathInput" placeholder="downloads" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="mobileDownloadFileNameInput">文件名（可选）</label>
+                        <input type="text" class="form-control" id="mobileDownloadFileNameInput" placeholder="留空使用URL文件名">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('mobileDownloadCreateModal')">取消</button>
+                <button class="btn btn-primary" id="mobileDownloadCreateSubmitBtn">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="mobileDownloadSettingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-cog"></i> 下载设置</h3>
+                <button class="modal-close" onclick="closeModal('mobileDownloadSettingsModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="mobileDefaultDownloadPathInput">默认下载目录</label>
+                    <input type="text" class="form-control" id="mobileDefaultDownloadPathInput" placeholder="download">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('mobileDownloadSettingsModal')">取消</button>
+                <button class="btn btn-primary" id="mobileDownloadSettingsSaveBtn">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="mobileLlamaCppEditModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="mobileLlamaCppEditTitle">添加路径</h3>
+                <button class="modal-close" onclick="closeModal('mobileLlamaCppEditModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="mobileLlamaCppPathInput">目录路径</label>
+                    <input type="text" class="form-control" id="mobileLlamaCppPathInput" placeholder="/path/to/llama.cpp">
+                    <small class="form-text">填写已编译的 llama.cpp 根目录路径</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="mobileLlamaCppNameInput">名称（可选）</label>
+                    <input type="text" class="form-control" id="mobileLlamaCppNameInput" placeholder="例如：llama.cpp">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="mobileLlamaCppDescInput">描述（可选）</label>
+                    <textarea class="form-control" id="mobileLlamaCppDescInput" rows="3" placeholder="说明用途或备注"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('mobileLlamaCppEditModal')">取消</button>
+                <button class="btn btn-primary" id="mobileLlamaCppSaveBtn">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="mobileModelPathEditModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="mobileModelPathEditTitle">添加模型目录</h3>
+                <button class="modal-close" onclick="closeModal('mobileModelPathEditModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="mobileModelPathNameInput">名称（可选）</label>
+                    <input type="text" class="form-control" id="mobileModelPathNameInput" placeholder="例如：本地模型库">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="mobileModelPathPathInput">目录路径</label>
+                    <input type="text" class="form-control" id="mobileModelPathPathInput" placeholder="/path/to/models">
+                    <small class="form-text">支持多个模型根目录，将合并检索其中所有 GGUF 模型</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="mobileModelPathDescInput">描述（可选）</label>
+                    <input type="text" class="form-control" id="mobileModelPathDescInput" placeholder="可选：说明用途、存放模型类型等">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('mobileModelPathEditModal')">取消</button>
+                <button class="btn btn-primary" id="mobileModelPathSaveBtn">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="consoleModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-terminal"></i> 控制台输出</h3>
+                <button class="modal-close" onclick="closeModal('consoleModal')">&times;</button>
+            </div>
+            <div class="modal-body" style="display:flex; flex-direction:column; padding: 0; overflow:hidden; min-height:0;">
+                <div style="display:flex; flex-wrap: wrap; align-items:center; gap: 0.75rem; padding: 0.75rem; border-bottom: 1px solid var(--border-color); background: #f8f9fa;">
+                    <button class="btn btn-secondary btn-sm" id="refreshConsoleBtn"><i class="fas fa-sync-alt"></i> 刷新</button>
+                    <label style="display:inline-flex; align-items:center; gap:6px; font-size: 0.9rem;">
+                        <input type="checkbox" id="autoRefreshConsole"> 自动刷新
+                    </label>
+                    <label style="display:inline-flex; align-items:center; gap:6px; font-size: 0.9rem;">
+                        间隔(ms)
+                        <input class="form-control" type="number" id="intervalConsoleInput" value="2000" min="500" style="width:100px; padding: 4px 8px;">
+                    </label>
+                    <div id="consoleStatusText" style="font-size: 0.85rem; color: var(--text-secondary); margin-left:auto;"></div>
+                </div>
+                <div id="logContainer" style="flex:1; min-height:0; overflow:auto; padding: 0.75rem; background: #0b1220;">
+                    <pre id="consoleContent" style="white-space: pre-wrap; word-break: break-word; margin: 0; color: #e5e7eb; font-size: 12px; line-height: 1.4;"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('consoleModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="loadModelModal">
+        <div class="modal-content load-model-modal">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-upload" id="modelActionModalIcon"></i> <span id="modelActionModalTitleText">加载模型</span></h3>
+                <button class="modal-close" onclick="closeModal('loadModelModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="loadModelForm">
+                    <div class="load-model-layout">
+                        <div id="basicParamsContainer">
+                            <div class="form-group">
+                                <label class="form-label" for="modelId">模型ID</label>
+                                <input type="text" class="form-control" id="modelId" name="modelId" readonly style="background-color: #f3f4f6; display: none;">
+                                <input type="text" class="form-control" id="modelName" name="modelName" readonly style="background-color: #f3f4f6;">
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="llamaBinPathSelect">Llama.cpp 版本</label>
+                                <select class="form-control" id="llamaBinPathSelect" name="llamaBinPathSelect"></select>
+                            </div>
+
+                            <div class="form-group" id="enableVisionGroup" style="display:none;">
+                                <label class="form-label">启用视觉</label>
+                                <div class="form-check" style="margin-bottom: 0;">
+                                    <input class="form-check-input" type="checkbox" id="enableVision" name="enableVision" checked>
+                                    <label class="form-check-label" for="enableVision">启用</label>
+                                </div>
+                                <small class="form-text">关闭后将不会使用 --mmproj 参数，即不启用多模态</small>
+                            </div>
+
+                            <div class="form-group" id="mainGpuGroup">
+                                <label class="form-label" for="mainGpuSelect">主GPU (main-gpu)</label>
+                                <select class="form-control" id="mainGpuSelect" name="mg">
+                                    <option value="-1">默认</option>
+                                </select>
+                                <small class="form-text">选择 llama.cpp 运行所使用的主要 GPU</small>
+                                <small class="form-text" id="ctxSizeVramHint" style="color: red; font-weight: 500; white-space: pre-wrap; display: block; margin-top: 8px;"></small>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">可用计算设备</label>
+                                <small class="form-text">默认已勾选全部设备；取消勾选可排除设备</small>
+                                <div id="deviceChecklist" style="border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 0.75rem; max-height: 260px; overflow: auto;">
+                                    <div class="settings-empty">请先选择 Llama.cpp 版本</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="dynamicParamsContainer">
+                            <div class="loading-spinner">
+                                <div class="spinner"></div>
+                            </div>
+                        </div>
+                        <div id="benchmarkParamsContainer" style="display:none;">
+                            <div class="loading-spinner">
+                                <div class="spinner"></div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('loadModelModal')">取消</button>
+                <button class="btn btn-secondary" id="estimateVramBtn" onclick="estimateVramAction()"><i class="fas fa-memory"></i> 估算显存</button>
+                <button class="btn btn-secondary" id="modelActionResetBtn" style="display:none;" onclick="resetModelBenchmarkForm()">重置</button>
+                <button class="btn btn-primary" id="modelActionSubmitBtn" onclick="submitModelAction()">加载模型</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="mobile-bottom-nav" id="mobileBottomNav">
+        <button class="btn btn-secondary" data-mobile-page="models" style="flex:1; justify-content:center;">
+            <i class="fas fa-layer-group"></i> 模型
+        </button>
+        <button class="btn btn-secondary" data-mobile-page="hf" style="flex:1; justify-content:center;">
+            <i class="fas fa-cloud-download-alt"></i> HF
+        </button>
+        <button class="btn btn-secondary" data-mobile-page="downloads" style="flex:1; justify-content:center;">
+            <i class="fas fa-download"></i> 下载
+        </button>
+        <button class="btn btn-secondary" data-mobile-page="settings" style="flex:1; justify-content:center;">
+            <i class="fas fa-sliders-h"></i> 设置
+        </button>
+    </div>
+
+    <div id="dynamicModalRoot"></div>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="js/websocket.js"></script>
+    <script src="js/model-detail.js"></script>
+    <script src="js/model-list.js"></script>
+    <script src="js/model-action-modal.js"></script>
+    <script src="js/model-benchmark.js"></script>
+    <script src="js/index-mobile-nav.js"></script>
+    <script src="js/hf-mobile.js"></script>
+    <script src="js/download-mobile.js"></script>
+    <script src="js/console-modal-mobile.js"></script>
+    <script src="js/settings-mobile.js"></script>
+    <script src="js/llamacpp-setting-mobile.js"></script>
+    <script src="js/model-path-setting-mobile.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            loadModels();
+            initWebSocket();
+            initModelSearch();
+            loadParamConfig();
+        });
+
+        let paramConfig = [];
+
+        function loadParamConfig() {
+            fetch('/api/models/param/server/list')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.params) {
+                        paramConfig = data.params;
+                        renderDynamicParams();
+                    } else {
+                        const container = document.getElementById('dynamicParamsContainer');
+                        if (container) {
+                            container.innerHTML =
+                                '<div class="empty-state"><div class="empty-state-icon"><i class="fas fa-exclamation-triangle"></i></div><div class="empty-state-title">加载失败</div><div class="empty-state-text">无法加载参数配置</div></div>';
+                        }
+                    }
+                })
+                .catch(() => {
+                    const container = document.getElementById('dynamicParamsContainer');
+                    if (container) {
+                        container.innerHTML =
+                            '<div class="empty-state"><div class="empty-state-icon"><i class="fas fa-exclamation-triangle"></i></div><div class="empty-state-title">网络错误</div><div class="empty-state-text">无法连接到服务器</div></div>';
+                    }
+                });
+        }
+
+        function renderDynamicParams() {
+            const container = document.getElementById('dynamicParamsContainer');
+            if (!container) return;
+            const sortedParams = [...paramConfig].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+            let html = '';
+            if (sortedParams.length > 0) {
+                html += '<div style="display: grid; grid-template-columns: 1fr; gap: 1rem;">';
+                sortedParams.forEach(param => {
+                    html += renderParamField(param, false);
+                });
+                html += '</div>';
+            }
+            html += '<div class="form-group" style="margin-top: 1rem;">';
+            html += '<label class="form-label" for="extraParams">额外参数</label>';
+            html += '<textarea class="form-control" id="extraParams" name="extraParams" rows="2" placeholder="例如: --grp-attn-n 8 --grp-attn-w 512"></textarea>';
+            html += '<small class="form-text">输入额外的命令行参数，用空格分隔</small>';
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function renderParamField(param) {
+            const fieldName = param.fullName.replace(/^--/, '').replace(/^-/, '');
+            const fieldId = 'param_' + fieldName;
+            const displayName = param.name;
+            const description = param.description || '';
+            const defaultValue = param.defaultValue || '';
+            const type = param.type || 'STRING';
+            const values = param.values || [];
+
+            let html = '';
+            const labelHtml = description
+                ? `<label class="form-label" for="${fieldId}">${displayName} <i class="fas fa-question-circle" style="color: #DCDCDC; cursor: help; margin-left: 4px;" title="${description}"></i></label>`
+                : `<label class="form-label" for="${fieldId}">${displayName}</label>`;
+
+            if (values && values.length > 0) {
+                html += '<div class="form-group">';
+                html += labelHtml;
+                html += `<select class="form-control" id="${fieldId}" name="${fieldName}">`;
+                values.forEach(v => {
+                    const selected = v === defaultValue ? 'selected' : '';
+                    html += `<option value="${v}" ${selected}>${v}</option>`;
+                });
+                html += '</select>';
+                html += '</div>';
+            } else {
+                switch (type) {
+                    case 'INTEGER':
+                        html += '<div class="form-group">';
+                        html += labelHtml;
+                        html += `<input type="number" class="form-control" id="${fieldId}" name="${fieldName}" value="${defaultValue}">`;
+                        html += '</div>';
+                        break;
+                    case 'FLOAT':
+                        html += '<div class="form-group">';
+                        html += labelHtml;
+                        html += `<input type="number" step="0.01" class="form-control" id="${fieldId}" name="${fieldName}" value="${defaultValue}">`;
+                        html += '</div>';
+                        break;
+                    case 'BOOLEAN':
+                        html += '<div class="form-group">';
+                        html += labelHtml;
+                        html += `<select class="form-control" id="${fieldId}" name="${fieldName}">`;
+                        html += `<option value="0" ${defaultValue === '0' || defaultValue === 'false' ? 'selected' : ''}>false</option>`;
+                        html += `<option value="1" ${defaultValue === '1' || defaultValue === 'true' || defaultValue === 'on' ? 'selected' : ''}>true</option>`;
+                        html += '</select>';
+                        html += '</div>';
+                        break;
+                    case 'LOGIC':
+                        html += '<div class="form-group">';
+                        html += labelHtml;
+                        html += `<select class="form-control" id="${fieldId}" name="${fieldName}">`;
+                        html += `<option value="0" ${defaultValue === '0' || defaultValue === 'false' ? 'selected' : ''}>false</option>`;
+                        html += `<option value="1" ${defaultValue === '1' || defaultValue === 'true' ? 'selected' : ''}>true</option>`;
+                        html += '</select>';
+                        html += '</div>';
+                        break;
+                    case 'STRING':
+                    default:
+                        html += '<div class="form-group">';
+                        html += labelHtml;
+                        html += `<input type="text" class="form-control" id="${fieldId}" name="${fieldName}" value="${defaultValue}">`;
+                        html += '</div>';
+                        break;
+                }
+            }
+            return html;
+        }
+
+        function formatFileSize(size) {
+            if (size < 1024) return size + ' B';
+            if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
+            if (size < 1024 * 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
+            return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+        }
+
+        function initModelSearch() {
+            const input = document.getElementById('modelSearchInput');
+            if (!input) return;
+            input.addEventListener('input', (e) => filterModels(e.target.value));
+        }
+
+        function filterModels(k) {
+            k = (k || '').toLowerCase();
+            document.querySelectorAll('.model-item').forEach(el => {
+                const nameEl = el.querySelector('.model-name');
+                const name = nameEl ? nameEl.textContent.toLowerCase() : '';
+                el.style.display = name.includes(k) ? '' : 'none';
+            });
+        }
+
+        function renderModelsList(models) {
+            const modelsList = document.getElementById('modelsList');
+            if (!models || models.length === 0) {
+                modelsList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon"><i class="fas fa-box-open"></i></div>
+                        <div class="empty-state-title">没有模型</div>
+                        <div class="empty-state-text">请先在完整页面中添加模型目录</div>
+                        <a class="btn btn-primary" href="index.html">打开完整页面</a>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            models.forEach(model => {
+                const metadata = model.metadata || {};
+                const architecture = metadata.architecture || '未知';
+                const isLoading = !!model.isLoading;
+
+                let status = model.status;
+                let statusText = '已停止';
+                let statusIcon = 'fa-stop-circle';
+                let statusClass = 'status-stopped';
+
+                if (isLoading) {
+                    statusText = '加载中';
+                    statusIcon = 'fa-spinner fa-spin';
+                    statusClass = 'status-loading';
+                } else if (model.isLoaded) {
+                    statusText = status === 'running' ? '运行中' : '已加载';
+                    statusIcon = status === 'running' ? 'fa-play-circle' : 'fa-check-circle';
+                    statusClass = status === 'running' ? 'status-running' : 'status-loaded';
+                }
+
+                const modelIcon = getModelIcon(architecture);
+                const displayName = (model.alias && model.alias.trim()) ? model.alias : model.name;
+                const modelId = encodeURIComponent(model.id);
+
+                html += `
+                    <div class="model-item">
+                        <div class="model-icon-wrapper">
+                            ${modelIcon ? `<img src="${modelIcon}" alt="${architecture}">` : `<i class="fas fa-brain"></i>`}
+                        </div>
+                        <div class="model-details">
+                            <div class="model-name" title="${model.name}">${displayName}${model.isMultimodal ? '<span class="vision-badge"><i class="fas fa-image"></i></span>' : ''}</div>
+                            <div class="model-mobile-actions">
+                                <div class="model-status-badge ${statusClass}">
+                                    <i class="fas ${statusIcon}"></i> <span>${statusText}</span>
+                                </div>
+                                <button class="btn btn-secondary btn-sm mobile-action-btn" onclick="openModelActionsModal(decodeURIComponent('${modelId}'))">操作</button>
+                            </div>
+                            <div class="model-meta model-mobile-meta">
+                                <span class="model-arch"><i class="fas fa-layer-group"></i> ${architecture}</span>
+                                <span><i class="fas fa-hdd"></i> ${formatFileSize(model.size)}</span>
+                                ${model.port ? `<span><i class="fas fa-network-wired"></i> ${model.port}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            modelsList.innerHTML = html;
+            const input = document.getElementById('modelSearchInput');
+            if (input) filterModels(input.value);
+        }
+
+        function openModelActionsModal(modelId) {
+            const model = (currentModelsData || []).find(m => m && m.id === modelId);
+            if (!model) {
+                showToast('错误', '未找到模型信息', 'error');
+                return;
+            }
+            const displayName = (model.alias && model.alias.trim()) ? model.alias : model.name;
+            const metadata = model.metadata || {};
+            const architecture = metadata.architecture || '未知';
+            const info = document.getElementById('modelActionsInfo');
+            const title = document.getElementById('modelActionsTitle');
+            const buttons = document.getElementById('modelActionsButtons');
+            if (title) title.textContent = displayName || '模型操作';
+            if (info) {
+                const statusText = model.isLoading ? '加载中' : (model.isLoaded ? (model.status === 'running' ? '运行中' : '已加载') : '已停止');
+                const sizeText = model.size ? formatFileSize(model.size) : '';
+                info.textContent = `${architecture} · ${sizeText} · ${statusText}`;
+            }
+            if (buttons) {
+                const modelIdEsc = encodeURIComponent(model.id);
+                const displayNameEsc = encodeURIComponent(displayName || model.name || model.id || '');
+                const canLoad = !model.isLoaded && !model.isLoading;
+                const canStop = model.isLoaded && model.status === 'running';
+                const actionList = [
+                    { label: '加载模型', className: 'btn-primary', enabled: canLoad, action: () => loadModel(model.id, model.name) },
+                    { label: '更新参数', className: 'btn-secondary', enabled: true, action: () => viewModelConfig(model.id) },
+                    { label: '性能测试', className: 'btn-secondary', enabled: true, action: () => openModelBenchmarkDialog(decodeURIComponent(modelIdEsc), decodeURIComponent(displayNameEsc)) },
+                    { label: '测试结果', className: 'btn-secondary', enabled: true, action: () => openModelBenchmarkList(decodeURIComponent(modelIdEsc), decodeURIComponent(displayNameEsc)) },
+                    { label: '模型详情', className: 'btn-secondary', enabled: true, action: () => viewModelDetails(model.id) },
+                    { label: '停止模型', className: 'btn-danger', enabled: canStop, action: () => stopModel(model.id) }
+                ];
+                buttons.innerHTML = actionList.map((item, idx) => {
+                    const disabled = item.enabled ? '' : 'disabled';
+                    return `<button class="btn ${item.className}" ${disabled} data-action-index="${idx}">${item.label}</button>`;
+                }).join('');
+                const btnEls = buttons.querySelectorAll('button[data-action-index]');
+                btnEls.forEach(btn => {
+                    const idx = parseInt(btn.getAttribute('data-action-index'), 10);
+                    const item = actionList[idx];
+                    if (!item || !item.enabled) return;
+                    btn.onclick = () => {
+                        closeModal('modelActionsModal');
+                        item.action();
+                    };
+                });
+            }
+            const modal = document.getElementById('modelActionsModal');
+            if (modal) modal.classList.add('show');
+        }
+
+        function showModelLoadingState(modelId) {
+            let loadingToast = document.getElementById('loading-toast-' + modelId);
+            if (!loadingToast) {
+                const toastContainer = document.getElementById('toastContainer');
+                const toastHtml = `
+                    <div class="toast info" id="loading-toast-${modelId}">
+                        <div class="toast-icon"><i class="fas fa-spinner fa-spin"></i></div>
+                        <div class="toast-content"><div class="toast-title">加载中</div><div class="toast-message">正在加载...</div></div>
+                    </div>`;
+                toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+            }
+        }
+
+        function removeModelLoadingState(modelId) {
+            const el = document.getElementById('loading-toast-' + modelId);
+            if (el) el.remove();
+        }
+
+        function stopModel(modelId) {
+            fetch('/api/models/stop', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelId })
+            }).then(r => r.json()).then(d => {
+                if (!d.success) showToast('错误', d.error, 'error');
+            });
+        }
+
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('show');
+            if (id === 'consoleModal') {
+                if (typeof stopConsoleAuto === 'function') stopConsoleAuto();
+            }
+            if (id === 'loadModelModal') {
+                const form = document.getElementById('loadModelForm');
+                if (form) form.reset();
+                const btn = document.getElementById('modelActionSubmitBtn');
+                if (btn) btn.disabled = false;
+                if (typeof setModelActionMode === 'function') setModelActionMode('load');
+            } else if (id === 'mobileDownloadCreateModal') {
+                const form = document.getElementById('mobileDownloadCreateForm');
+                if (form) form.reset();
+            } else if (id === 'mobileDownloadSettingsModal') {
+                const input = document.getElementById('mobileDefaultDownloadPathInput');
+                if (input) input.value = '';
+            }
+        }
+
+        window.addEventListener('click', function (e) {
+            if (!e || !e.target || !e.target.classList || !e.target.classList.contains('modal')) return;
+            if (e.target.id === 'loadModelModal') {
+                if (window.__modelActionMode === 'config') closeModal('loadModelModal');
+                return;
+            }
+            closeModal(e.target.id);
+        });
+
+        function showToast(title, msg, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const id = 'toast-' + Date.now();
+            const html = `
+                <div class="toast ${type}" id="${id}">
+                    <div class="toast-icon"><i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i></div>
+                    <div class="toast-content"><div class="toast-title">${title}</div><div class="toast-message">${msg}</div></div>
+                    <button class="toast-close" onclick="document.getElementById('${id}').remove()">&times;</button>
+                </div>`;
+            container.insertAdjacentHTML('beforeend', html);
+            setTimeout(() => { const el = document.getElementById(id); if (el) el.remove(); }, 5000);
+        }
+
+        function renderBenchmarkParamsContainer() {
+            const unifiedModal = document.getElementById('loadModelModal');
+            const inUnified = !!(unifiedModal && unifiedModal.classList && unifiedModal.classList.contains('show') && window.__modelActionMode === 'benchmark');
+            const standaloneModal = document.getElementById('modelBenchmarkModal');
+            const root = inUnified ? unifiedModal : standaloneModal;
+            const container = root ? root.querySelector('#benchmarkParamsContainer') : document.getElementById('benchmarkParamsContainer');
+            if (!container) return;
+
+            const sorted = (Array.isArray(benchmarkParamConfig) ? benchmarkParamConfig : []).slice().sort((a, b) => (a && a.sort ? a.sort : 0) - (b && b.sort ? b.sort : 0));
+            const fields = [];
+            const makeId = (fullName) => {
+                const s = fullName == null ? '' : String(fullName);
+                if (!s) return '';
+                return 'benchmark_param_' + s.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+            };
+
+            for (let i = 0; i < sorted.length; i++) {
+                const p = sorted[i];
+                if (!p) continue;
+                const fullName = p.fullName == null ? '' : String(p.fullName);
+                if (!fullName) continue;
+                const id = makeId(fullName);
+                const opts = { id: id };
+                fields.push(renderBenchmarkFieldFromParam(p, opts));
+            }
+
+            if (!fields.length) {
+                container.innerHTML = '<div class="settings-empty">无可用参数</div>';
+                return;
+            }
+
+            container.innerHTML = `<div style="display: grid; grid-template-columns: 1fr; gap: 1rem;">${fields.join('')}</div>`;
+        }
+    </script>
+</body>
+</html>

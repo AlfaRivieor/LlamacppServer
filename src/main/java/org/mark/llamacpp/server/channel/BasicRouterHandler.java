@@ -109,8 +109,7 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			boolean isRootRequest = path.equals("/");
 
 			if (isRootRequest) {
-				// 只有当用户访问根路径时，才返回首页
-				path = "/index.html";
+				path = isMobileRequest(request) ? "/index-mobile.html" : "/index.html";
 			}
 			// 
 			if(path.indexOf('?') > 0) {
@@ -142,6 +141,31 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			logger.error("处理静态文件请求时发生错误", e);
 			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
 		}
+	}
+
+	private boolean isMobileRequest(FullHttpRequest request) {
+		if (request == null) {
+			return false;
+		}
+		String chMobile = request.headers().get("Sec-CH-UA-Mobile");
+		if (chMobile != null && chMobile.indexOf("?1") >= 0) {
+			return true;
+		}
+		String userAgent = request.headers().get("User-Agent");
+		if (userAgent == null || userAgent.isBlank()) {
+			return false;
+		}
+		String ua = userAgent.toLowerCase();
+		return ua.contains("mobi")
+				|| ua.contains("android")
+				|| ua.contains("iphone")
+				|| ua.contains("ipad")
+				|| ua.contains("ipod")
+				|| ua.contains("windows phone")
+				|| ua.contains("webos")
+				|| ua.contains("blackberry")
+				|| ua.contains("opera mini")
+				|| ua.contains("opera mobi");
 	}
 	
 	

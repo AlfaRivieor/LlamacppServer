@@ -513,14 +513,14 @@ function openModelBenchmarkList(modelId, modelName) {
         modal.id = modalId;
         modal.className = 'modal';
         modal.innerHTML = `
-            <div class="modal-content" style="min-width: 70vw; max-width: 95vw;">
+            <div class="modal-content" style="min-width: 100%; max-width: 100%;">
                 <div class="modal-header">
                     <h3 class="modal-title"><i class="fas fa-file-alt"></i> 模型测试结果对比</h3>
                     <button class="modal-close" onclick="closeModal('${modalId}')">&times;</button>
                 </div>
                 <div class="modal-body">
                     <div style="display:flex; gap:16px; height:60vh;">
-                        <div style="width:32%; border:1px solid #e5e7eb; border-radius:0.75rem; overflow:hidden; background:#f9fafb;">
+                        <div style="width:100%; border:1px solid #e5e7eb; border-radius:0.75rem; overflow:hidden; background:#f9fafb;">
                             <div style="padding:8px 10px; border-bottom:1px solid #e5e7eb; font-size:13px; color:#374151;">测试结果文件</div>
                             <div id="${modalId}List" style="max-height:calc(60vh - 36px); overflow:auto; font-size:13px; color:#374151;">加载中...</div>
                         </div>
