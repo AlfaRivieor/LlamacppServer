@@ -22,6 +22,7 @@ function showModelDetailModal(model) {
                 `<button class="btn btn-secondary" id="${modalId}TabMetrics">metrics</button>` +
                 `<button class="btn btn-secondary" id="${modalId}TabProps">props</button>` +
                 `<button class="btn btn-secondary" id="${modalId}TabChatTemplate">聊天模板</button>` +
+                `<button class="btn btn-secondary" id="${modalId}TabToken">Token计算</button>` +
                 `</div>`;
     let wrapperStart = `<div style="display:flex; flex-direction:column; height:60vh; min-height:60vh;">`;
     let bodyStart = `<div style="flex:1; min-height:0;">`;
@@ -56,30 +57,60 @@ function showModelDetailModal(model) {
                         `</div>` +
                         `<textarea class="form-control" id="${modalId}ChatTemplateTextarea" rows="18" placeholder="(可选)" style="height:calc(100% - 48px); resize: vertical;"></textarea>` +
                         `</div>`;
+    let tokenPanel = `<div id="${modalId}TokenPanel" style="display:none; height:100%;">` +
+                        `<div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">` +
+                        `<button class="btn btn-primary" id="${modalId}TokenCalcBtn">生成 prompt 并计算 tokens</button>` +
+                        `<div style="margin-left:auto; font-size:13px; color:#374151;">tokens: <strong id="${modalId}TokenCount">-</strong></div>` +
+                        `</div>` +
+                        `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; height:calc(100% - 48px); min-height:0;">` +
+                            `<div style="display:flex; flex-direction:column; min-height:0;">` +
+                                `<div style="font-size:13px; color:#374151; margin-bottom:6px;">输入</div>` +
+                                `<textarea class="form-control" id="${modalId}TokenInput" rows="12" placeholder="输入要计算的文本..." style="flex:1; min-height:0; resize:none;"></textarea>` +
+                            `</div>` +
+                            `<div style="display:flex; flex-direction:column; min-height:0;">` +
+                                `<div style="font-size:13px; color:#374151; margin-bottom:6px;">apply-template 输出 prompt</div>` +
+                                `<textarea class="form-control" id="${modalId}TokenPromptOutput" rows="12" readonly style="flex:1; min-height:0; resize:none; background:#f9fafb;"></textarea>` +
+                            `</div>` +
+                        `</div>` +
+                    `</div>`;
     let bodyEnd = `</div>`;
     let wrapperEnd = `</div>`;
-    content.innerHTML = wrapperStart + tabs + bodyStart + infoPanel + metricsPanel + propsPanel + chatTemplatePanel + bodyEnd + wrapperEnd;
+    content.innerHTML = wrapperStart + tabs + bodyStart + infoPanel + metricsPanel + propsPanel + chatTemplatePanel + tokenPanel + bodyEnd + wrapperEnd;
     modal.classList.add('show');
     const tabInfo = document.getElementById(modalId + 'TabInfo');
     const tabMetrics = document.getElementById(modalId + 'TabMetrics');
     const tabProps = document.getElementById(modalId + 'TabProps');
     const tabChatTemplate = document.getElementById(modalId + 'TabChatTemplate');
+    const tabToken = document.getElementById(modalId + 'TabToken');
     const fetchBtn = document.getElementById(modalId + 'MetricsFetchBtn');
     const fetchPropsBtn = document.getElementById(modalId + 'PropsFetchBtn');
     const tplReloadBtn = document.getElementById(modalId + 'ChatTemplateReloadBtn');
     const tplDefaultBtn = document.getElementById(modalId + 'ChatTemplateDefaultBtn');
     const tplSaveBtn = document.getElementById(modalId + 'ChatTemplateSaveBtn');
     const tplDeleteBtn = document.getElementById(modalId + 'ChatTemplateDeleteBtn');
+    const tokenCalcBtn = document.getElementById(modalId + 'TokenCalcBtn');
+    const tokenInputEl = document.getElementById(modalId + 'TokenInput');
     if (tabInfo) tabInfo.onclick = () => openModelDetailTab('info');
     if (tabMetrics) tabMetrics.onclick = () => { openModelDetailTab('metrics'); loadModelMetrics(); };
     if (tabProps) tabProps.onclick = () => { openModelDetailTab('props'); loadModelProps(); };
     if (tabChatTemplate) tabChatTemplate.onclick = () => { openModelDetailTab('chatTemplate'); loadModelChatTemplate(false); };
+    if (tabToken) tabToken.onclick = () => openModelDetailTab('token');
     if (fetchBtn) fetchBtn.onclick = () => loadModelMetrics();
     if (fetchPropsBtn) fetchPropsBtn.onclick = () => loadModelProps();
     if (tplReloadBtn) tplReloadBtn.onclick = () => loadModelChatTemplate(true);
     if (tplDefaultBtn) tplDefaultBtn.onclick = () => loadModelDefaultChatTemplate();
     if (tplSaveBtn) tplSaveBtn.onclick = () => saveModelChatTemplate();
     if (tplDeleteBtn) tplDeleteBtn.onclick = () => deleteModelChatTemplate();
+    if (tokenCalcBtn) tokenCalcBtn.onclick = () => calculateModelTokens();
+    if (tokenInputEl) {
+        tokenInputEl.onkeydown = (e) => {
+            if (e && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                if (typeof calculateModelTokens === 'function') calculateModelTokens();
+                e.preventDefault();
+                return false;
+            }
+        };
+    }
     openModelDetailTab('info');
 }
 
@@ -89,14 +120,17 @@ function openModelDetailTab(tab) {
     const metrics = document.getElementById(modalId + 'MetricsPanel');
     const props = document.getElementById(modalId + 'PropsPanel');
     const chatTemplate = document.getElementById(modalId + 'ChatTemplatePanel');
+    const token = document.getElementById(modalId + 'TokenPanel');
     const btnInfo = document.getElementById(modalId + 'TabInfo');
     const btnMetrics = document.getElementById(modalId + 'TabMetrics');
     const btnProps = document.getElementById(modalId + 'TabProps');
     const btnChatTemplate = document.getElementById(modalId + 'TabChatTemplate');
+    const btnToken = document.getElementById(modalId + 'TabToken');
     if (info) info.style.display = tab === 'info' ? '' : 'none';
     if (metrics) metrics.style.display = tab === 'metrics' ? '' : 'none';
     if (props) props.style.display = tab === 'props' ? '' : 'none';
     if (chatTemplate) chatTemplate.style.display = tab === 'chatTemplate' ? '' : 'none';
+    if (token) token.style.display = tab === 'token' ? '' : 'none';
     const applyTabBtnStyle = (btn, active) => {
         if (!btn) return;
         btn.classList.remove('btn-primary');
@@ -107,6 +141,7 @@ function openModelDetailTab(tab) {
     applyTabBtnStyle(btnMetrics, tab === 'metrics');
     applyTabBtnStyle(btnProps, tab === 'props');
     applyTabBtnStyle(btnChatTemplate, tab === 'chatTemplate');
+    applyTabBtnStyle(btnToken, tab === 'token');
 }
 
 function loadModelMetrics() {
@@ -253,4 +288,70 @@ function deleteModelChatTemplate() {
         .catch(() => {
             showToast('错误', '网络请求失败', 'error');
         });
+}
+
+async function calculateModelTokens() {
+    const modelId = window.__modelDetailModelId;
+    const inputEl = document.getElementById('modelDetailModalTokenInput');
+    const promptEl = document.getElementById('modelDetailModalTokenPromptOutput');
+    const countEl = document.getElementById('modelDetailModalTokenCount');
+    const btn = document.getElementById('modelDetailModalTokenCalcBtn');
+    if (!modelId || !inputEl || !promptEl || !countEl || !btn) return;
+
+    const userText = inputEl.value == null ? '' : String(inputEl.value);
+    if (!userText.trim()) {
+        showToast('提示', '请输入文本内容', 'info');
+        inputEl.focus();
+        return;
+    }
+
+    const prevText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '计算中...';
+    countEl.textContent = '...';
+    promptEl.value = '';
+
+    try {
+        const applyRes = await fetch('/apply-template', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                modelId,
+                messages: [{ role: 'user', content: userText }]
+            })
+        });
+        const applyJson = await applyRes.json().catch(() => null);
+        if (!applyRes.ok) {
+            const msg = applyJson && (applyJson.error || applyJson.message) ? (applyJson.error || applyJson.message) : ('HTTP ' + applyRes.status);
+            throw new Error(msg);
+        }
+        const prompt = applyJson && applyJson.prompt != null ? String(applyJson.prompt) : '';
+        if (!prompt) throw new Error('apply-template 响应缺少 prompt');
+        promptEl.value = prompt;
+
+        const tokRes = await fetch('/tokenize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                modelId,
+                content: prompt,
+                add_special: true,
+                parse_special: true,
+                with_pieces: false
+            })
+        });
+        const tokJson = await tokRes.json().catch(() => null);
+        if (!tokRes.ok) {
+            const msg = tokJson && (tokJson.error || tokJson.message) ? (tokJson.error || tokJson.message) : ('HTTP ' + tokRes.status);
+            throw new Error(msg);
+        }
+        if (!tokJson || !Array.isArray(tokJson.tokens)) throw new Error('tokenize 响应缺少 tokens');
+        countEl.textContent = String(tokJson.tokens.length);
+    } catch (e) {
+        countEl.textContent = '-';
+        showToast('错误', e && e.message ? e.message : '请求失败', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = prevText;
+    }
 }
