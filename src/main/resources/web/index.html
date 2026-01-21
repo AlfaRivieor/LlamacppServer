@@ -931,7 +931,11 @@
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ modelId })
             }).then(r => r.json()).then(d => {
-                if (!d.success) showToast('错误', d.error, 'error');
+                if (!d.success) {
+                    showToast('错误', d.error, 'error');
+                    return;
+                }
+                removeModelLoadingState(modelId);
             });
         }
 

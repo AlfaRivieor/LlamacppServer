@@ -176,7 +176,7 @@ function renderModelsList(models) {
 
         let actionButtons = '';
         if (isLoading) {
-            actionButtons = `<button class="btn-icon" disabled><i class="fas fa-spinner fa-spin"></i></button>`;
+            actionButtons = `<button class="btn-icon danger" onclick="stopModel('${model.id}')" title="取消加载"><i class="fas fa-stop"></i></button>`;
         } else if (model.isLoaded) {
             if (status === 'running') {
                 actionButtons = `

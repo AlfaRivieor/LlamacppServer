@@ -96,7 +96,7 @@ function handleModelLoadEvent(data) {
     showToast('模型加载', `模型 ${data.modelId} 加载${action}`, data.success ? 'success' : 'error');
 
     if (window.pendingModelLoad && window.pendingModelLoad.modelId === data.modelId) {
-        closeModal('loadModelModal');
+        //closeModal('loadModelModal');
         window.pendingModelLoad = null;
     }
     if (data.success) {
@@ -109,6 +109,7 @@ function handleModelLoadEvent(data) {
 function handleModelStopEvent(data) {
     showToast('模型停止', `模型 ${data.modelId} 停止${data.success ? '成功' : '失败'}`, data.success ? 'success' : 'error');
     if (data.success) {
+        if (typeof removeModelLoadingState === 'function') removeModelLoadingState(data.modelId);
         applyModelPatch(data.modelId, { isLoading: false, isLoaded: false, status: 'stopped', port: null });
     }
 }

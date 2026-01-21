@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -93,6 +94,12 @@ public class LlamaServerManager {
 	private Map<String, LlamaCppProcess> loadedProcesses = new LinkedHashMap<>();
 	
 	private final Object processLock = new Object();
+	
+	private Map<String, LlamaCppProcess> loadingProcesses = new HashMap<>();
+	
+	private Map<String, Future<?>> loadingTasks = new HashMap<>();
+	
+	private Set<String> canceledLoadingModels = new HashSet<>();
 	
 	/**
 	 * 端口计数器，用于递增分配端口
@@ -460,17 +467,50 @@ public class LlamaServerManager {
 	 */
 	public boolean stopModel(String modelId) {
 		LlamaCppProcess process;
+		Future<?> task;
 		synchronized (this.processLock) {
 			process = this.loadedProcesses.get(modelId);
+			task = null;
 		}
-		if (process == null) {
-			return false;
+		if (process != null) {
+			boolean stopped = process.stop();
+			if (stopped) {
+				synchronized (this.processLock) {
+					this.loadedProcesses.remove(modelId);
+					this.modelPorts.remove(modelId);
+				}
+			}
+			return stopped;
 		}
-		boolean stopped = process.stop();
+		
+		boolean loading = this.isLoading(modelId);
+		synchronized (this.processLock) {
+			process = this.loadingProcesses.get(modelId);
+			task = this.loadingTasks.get(modelId);
+			if (process != null || task != null || loading) {
+				this.canceledLoadingModels.add(modelId);
+			}
+		}
+		
+		boolean stopped = false;
+		if (process != null) {
+			stopped = process.stop();
+		} else if (task != null) {
+			stopped = true;
+		} else if (loading) {
+			stopped = true;
+		}
+		if (task != null) {
+			task.cancel(true);
+		}
 		if (stopped) {
 			synchronized (this.processLock) {
-				this.loadedProcesses.remove(modelId);
+				this.loadingProcesses.remove(modelId);
+				this.loadingTasks.remove(modelId);
 				this.modelPorts.remove(modelId);
+			}
+			synchronized (this.loadingModels) {
+				this.loadingModels.remove(modelId);
 			}
 		}
 		return stopped;
@@ -544,9 +584,15 @@ public class LlamaServerManager {
 		final String chatTemplateFileSafe = chatTemplateFilePath == null ? "" : chatTemplateFilePath;
 
 		try {
-			this.executorService.submit(() -> {
+			Future<?> future = this.executorService.submit(() -> {
 				this.loadModelInBackgroundFromCmd(modelId, targetModel, binSafe, devSafe, mgSafe, enbaleVision, cmdSafe, chatTemplateFileSafe);
 			});
+			synchronized (this.processLock) {
+				this.loadingTasks.put(modelId, future);
+			}
+			if (this.isLoadCanceled(modelId)) {
+				future.cancel(true);
+			}
 			return true;
 		} catch (Exception e) {
 			synchronized (this.loadingModels) {
@@ -699,6 +745,9 @@ public class LlamaServerManager {
 	private void loadModelInBackgroundFromCmd(String modelId, GGUFModel targetModel, String llamaBinPath, List<String> device,
 			Integer mg, boolean enableVision, String cmd, String chatTemplateFilePath) {
 		try {
+			if (this.isLoadCanceled(modelId)) {
+				return;
+			}
 			int port = this.getNextAvailablePort();
 			String commandStr = buildCommandStr(targetModel, port, llamaBinPath, device, mg, enableVision, cmd, chatTemplateFilePath);
 			String processName = "llama-server-" + modelId;
@@ -741,7 +790,19 @@ public class LlamaServerManager {
 
 			boolean started = process.start();
 			if (!started) {
+				if (this.isLoadCanceled(modelId)) {
+					return;
+				}
 				LlamaServer.sendModelLoadEvent(modelId, false, "启动模型进程失败");
+				return;
+			}
+			
+			synchronized (this.processLock) {
+				this.loadingProcesses.put(modelId, process);
+			}
+			
+			if (this.isLoadCanceled(modelId)) {
+				process.stop();
 				return;
 			}
 			LlamaServer.sendModelLoadStartEvent(modelId, port, "模型启动中");
@@ -750,7 +811,15 @@ public class LlamaServerManager {
 				boolean timeout = !latch.await(10, TimeUnit.MINUTES);
 				if (timeout) {
 					process.stop();
+					if (this.isLoadCanceled(modelId)) {
+						return;
+					}
 					LlamaServer.sendModelLoadEvent(modelId, false, "模型加载超时");
+					return;
+				}
+				
+				if (this.isLoadCanceled(modelId)) {
+					process.stop();
 					return;
 				}
 
@@ -762,17 +831,34 @@ public class LlamaServerManager {
 					LlamaServer.sendModelLoadEvent(modelId, true, "模型加载成功", port);
 				} else {
 					process.stop();
+					if (this.isLoadCanceled(modelId)) {
+						return;
+					}
 					LlamaServer.sendModelLoadEvent(modelId, false, "模型加载失败");
 				}
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				process.stop();
+				if (this.isLoadCanceled(modelId)) {
+					return;
+				}
 				LlamaServer.sendModelLoadEvent(modelId, false, "模型加载被中断");
 			}
 		} finally {
+			synchronized (this.processLock) {
+				this.loadingProcesses.remove(modelId);
+				this.loadingTasks.remove(modelId);
+				this.canceledLoadingModels.remove(modelId);
+			}
 			synchronized (this.loadingModels) {
 				this.loadingModels.remove(targetModel.getModelId());
 			}
+		}
+	}
+	
+	private boolean isLoadCanceled(String modelId) {
+		synchronized (this.processLock) {
+			return this.canceledLoadingModels.contains(modelId);
 		}
 	}
 	

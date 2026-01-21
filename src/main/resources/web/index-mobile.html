@@ -809,7 +809,10 @@
                                 <div class="model-status-badge ${statusClass}">
                                     <i class="fas ${statusIcon}"></i> <span>${statusText}</span>
                                 </div>
-                                <button class="btn btn-secondary btn-sm mobile-action-btn" onclick="openModelActionsModal(decodeURIComponent('${modelId}'))">操作</button>
+                                ${isLoading
+                                    ? `<button class="btn btn-danger btn-sm mobile-action-btn" onclick="stopModel(decodeURIComponent('${modelId}'))">取消加载</button>`
+                                    : `<button class="btn btn-secondary btn-sm mobile-action-btn" onclick="openModelActionsModal(decodeURIComponent('${modelId}'))">操作</button>`
+                                }
                             </div>
                             <div class="model-meta model-mobile-meta">
                                 <span class="model-arch"><i class="fas fa-layer-group"></i> ${architecture}</span>
@@ -898,7 +901,11 @@
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ modelId })
             }).then(r => r.json()).then(d => {
-                if (!d.success) showToast('错误', d.error, 'error');
+                if (!d.success) {
+                    showToast('错误', d.error, 'error');
+                    return;
+                }
+                removeModelLoadingState(modelId);
             });
         }
 
