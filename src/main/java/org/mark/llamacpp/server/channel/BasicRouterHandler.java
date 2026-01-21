@@ -186,6 +186,6 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 	 * @return
 	 */
 	private boolean isApiRequest(String uri) {
-		return uri != null && (uri.startsWith("/api/") || uri.startsWith("/v1") || uri.startsWith("/session"));
+		return uri != null && (uri.startsWith("/api/") || uri.startsWith("/v1") || uri.startsWith("/session") || uri.startsWith("/tokenize") || uri.startsWith("/apply-template"));
 	}
 }
