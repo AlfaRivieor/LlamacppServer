@@ -52,7 +52,7 @@ public class LlamaServerManager {
 	/**
 	 * 	
 	 */
-	private static final Logger LOGGER = LoggerFactory.getLogger(LlamaServerManager.class);
+	private static final Logger logger = LoggerFactory.getLogger(LlamaServerManager.class);
 
 	/**
 	 * 	
@@ -1004,7 +1004,7 @@ public class LlamaServerManager {
 				return ApiResponse.error("获取slots失败: " + responseBody);
 			}
 		} catch (Exception e) {
-			LOGGER.error("获取slots时发生错误", e);
+			logger.info("获取slots时发生错误", e);
 			return ApiResponse.error("获取slots失败: " + e.getMessage());
 		}
 	}
@@ -1079,7 +1079,7 @@ public class LlamaServerManager {
 				return ApiResponse.error("保存slot失败: " + responseBody);
 			}
 		} catch (Exception e) {
-			LOGGER.error("保存slot缓存时发生错误", e);
+			logger.info("保存slot缓存时发生错误", e);
 			return ApiResponse.error("保存slot失败: " + e.getMessage());
 		}
 	}
@@ -1146,7 +1146,7 @@ public class LlamaServerManager {
 				return ApiResponse.error("加载slot失败: " + responseBody);
 			}
 		} catch (Exception e) {
-			LOGGER.error("加载slot缓存时发生错误", e);
+			logger.info("加载slot缓存时发生错误", e);
 			return ApiResponse.error("加载slot失败: " + e.getMessage());
 		}
 	}

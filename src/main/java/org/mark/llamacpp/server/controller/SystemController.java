@@ -101,12 +101,12 @@ public class SystemController implements BaseController {
 					//
 					System.exit(0);
 				} catch (Exception e) {
-					logger.error("停止服务时发生错误", e);
+					logger.info("停止服务时发生错误", e);
 				}
 			}).start();
 
 		} catch (Exception e) {
-			logger.error("处理停止服务请求时发生错误", e);
+			logger.info("处理停止服务请求时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("停止服务失败: " + e.getMessage()));
 		}
 	}
@@ -195,7 +195,7 @@ public class SystemController implements BaseController {
 
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("获取设备列表时发生错误", e);
+			logger.info("获取设备列表时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取设备列表失败: " + e.getMessage()));
 		}
 	}
@@ -263,7 +263,7 @@ public class SystemController implements BaseController {
 			}
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("估算显存时发生错误", e);
+			logger.info("估算显存时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("估算显存失败: " + e.getMessage()));
 		}
 	}

@@ -102,7 +102,7 @@ public class LlamaCppService {
 					prompt = applyResp.get("prompt").getAsString();
 				}
 			} catch (Exception e) {
-				logger.warn("调用 /apply-template 失败，将回退到简单拼接模板: {}", e.getMessage());
+				logger.info("调用 /apply-template 失败，将回退到简单拼接模板: {}", e.getMessage());
 			}
 			if (prompt == null) {
 				prompt = buildNaivePrompt(chatReq.get("messages").getAsJsonArray());
@@ -143,7 +143,7 @@ public class LlamaCppService {
 			
 			this.forwardToRemoteCompletion(ctx, request, completionBody, isStream, modelName);
 		} catch (Exception e) {
-			logger.error("转发 OpenAI Chat 到 /completion 时发生错误", e);
+			logger.info("转发 OpenAI Chat 到 /completion 时发生错误", e);
 			this.sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR.code(), e.getMessage());
 		}
 	}
@@ -244,7 +244,7 @@ public class LlamaCppService {
 					this.handleNonStreamResponse(ctx, connection, responseCode, modelName);
 				}
 			} catch (Exception e) {
-				logger.error("转发到远程 /completion 时发生错误", e);
+				logger.info("转发到远程 /completion 时发生错误", e);
 				this.sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR.code(), e.getMessage());
 			} finally {
 				if (connection != null) {

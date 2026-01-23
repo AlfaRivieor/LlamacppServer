@@ -81,7 +81,7 @@ public class ParamController implements BaseController {
 			response.put("params", parsed);
 			LlamaServer.sendJsonResponse(ctx, response);
 		} catch (Exception e) {
-			logger.error("获取参数列表时发生错误", e);
+			logger.info("获取参数列表时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取参数列表失败: " + e.getMessage()));
 		}
 	}
@@ -114,7 +114,7 @@ public class ParamController implements BaseController {
 			response.put("params", parsed);
 			LlamaServer.sendJsonResponse(ctx, response);
 		} catch (Exception e) {
-			logger.error("获取基准测试参数列表时发生错误", e);
+			logger.info("获取基准测试参数列表时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取基准测试参数列表失败: " + e.getMessage()));
 		}
 	}

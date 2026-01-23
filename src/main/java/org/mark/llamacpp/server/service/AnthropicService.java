@@ -265,7 +265,7 @@ public class AnthropicService {
                     handleNonStreamResponse(ctx, connection, responseCode);
                 }
             } catch (Exception e) {
-                logger.error("Error forwarding Anthropic request to llama.cpp", e);
+                logger.info("Error forwarding Anthropic request to llama.cpp", e);
                 sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
             } finally {
                 if (connection != null) {
@@ -367,7 +367,7 @@ public class AnthropicService {
 
                     future.addListener((ChannelFutureListener) channelFuture -> {
                         if (!channelFuture.isSuccess()) {
-                            logger.warn("写入流式数据失败，可能是客户端断开连接: {}", channelFuture.cause().getMessage());
+                            logger.info("写入流式数据失败，可能是客户端断开连接: {}", channelFuture.cause().getMessage());
                             ctx.close();
                         }
                     });
@@ -391,7 +391,7 @@ public class AnthropicService {
 
             logger.info("Anthropic 流式响应处理完成，共发送 {} 个数据块", chunkCount);
         } catch (Exception e) {
-            logger.error("处理 Anthropic 流式响应时发生错误", e);
+            logger.info("处理 Anthropic 流式响应时发生错误", e);
             if (e.getMessage() != null &&
                 (e.getMessage().contains("Connection reset by peer") ||
                  e.getMessage().contains("Broken pipe") ||

@@ -67,7 +67,7 @@ public class AnthropicRouterHandler extends SimpleChannelInboundHandler<FullHttp
 			}
             this.sendJsonResponse(ctx, ApiResponse.error("404 Not Found"));
         } catch (Exception e) {
-            logger.error("处理API请求时发生错误", e);
+            logger.info("处理API请求时发生错误", e);
             this.sendJsonResponse(ctx, ApiResponse.error("服务器内部错误"));
         }
     }
@@ -105,7 +105,7 @@ public class AnthropicRouterHandler extends SimpleChannelInboundHandler<FullHttp
 
 	@Override
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-		logger.error("处理请求时发生异常", cause);
+		logger.info("处理请求时发生异常", cause);
 		ctx.close();
 	}
 }

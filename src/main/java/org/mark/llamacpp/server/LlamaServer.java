@@ -303,7 +303,7 @@ public class LlamaServer {
 	
 				logger.info("配置已保存到文件: {}", configPath.toString());
 			} catch (IOException e) {
-				logger.error("保存配置文件失败", e);
+				logger.info("保存配置文件失败", e);
 				throw new RuntimeException("保存配置文件失败: " + e.getMessage(), e);
 			}
 		}
@@ -319,7 +319,7 @@ public class LlamaServer {
 				Path configPath = Paths.get("config/application.json");
 				if (!Files.exists(configPath)) {
 					if (createIfMissing) {
-						logger.warn("配置文件不存在，使用默认配置");
+						logger.info("配置文件不存在，使用默认配置");
 						LlamaServer.saveApplicationConfig();
 					}
 					return new JsonObject();
@@ -328,7 +328,7 @@ public class LlamaServer {
 				JsonObject root = GSON.fromJson(json, com.google.gson.JsonObject.class);
 				return root == null ? new JsonObject() : root;
 			} catch (Exception e) {
-				logger.warn("读取配置文件失败: {}", e.getMessage());
+				logger.info("读取配置文件失败: {}", e.getMessage());
 				return new JsonObject();
 			}
 		}
@@ -427,7 +427,7 @@ public class LlamaServer {
                         
                         @Override
                         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-                        		logger.warn("Failed to initialize a channel. Closing: " + ctx.channel(), cause);
+                        		logger.info("Failed to initialize a channel. Closing: " + ctx.channel(), cause);
                             ctx.close();
                         }
                     });
@@ -438,10 +438,10 @@ public class LlamaServer {
             
             future.channel().closeFuture().sync();
         } catch (InterruptedException e) {
-            logger.error("服务器被中断", e);
+            logger.info("服务器被中断", e);
             Thread.currentThread().interrupt();
         } catch (Exception e) {
-            logger.error("服务器启动失败", e);
+            logger.info("服务器启动失败", e);
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
@@ -476,7 +476,7 @@ public class LlamaServer {
                         }
                         @Override
                         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-                        		logger.warn("Failed to initialize a channel. Closing: " + ctx.channel(), cause);
+                        		logger.info("Failed to initialize a channel. Closing: " + ctx.channel(), cause);
                             ctx.close();
                         }
                     });
@@ -487,10 +487,10 @@ public class LlamaServer {
             
             future.channel().closeFuture().sync();
         } catch (InterruptedException e) {
-            logger.error("服务器被中断", e);
+            logger.info("服务器被中断", e);
             Thread.currentThread().interrupt();
         } catch (Exception e) {
-            logger.error("服务器启动失败", e);
+            logger.info("服务器启动失败", e);
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
@@ -599,7 +599,7 @@ public class LlamaServer {
 			
 			logger.info("设置已保存到文件: {}", settingsPath.toString());
 		} catch (IOException e) {
-			logger.error("保存设置到文件失败", e);
+			logger.info("保存设置到文件失败", e);
 			throw new RuntimeException("保存设置到文件失败: " + e.getMessage(), e);
 		}
 	}

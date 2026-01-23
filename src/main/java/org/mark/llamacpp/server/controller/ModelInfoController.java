@@ -177,7 +177,7 @@ public class ModelInfoController implements BaseController {
 			data.put("saved", ok);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("设置模型别名时发生错误", e);
+			logger.info("设置模型别名时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("设置模型别名失败: " + e.getMessage()));
 		}
 	}
@@ -230,7 +230,7 @@ public class ModelInfoController implements BaseController {
 			data.put("saved", saved);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("设置模型喜好时发生错误", e);
+			logger.info("设置模型喜好时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("设置模型喜好失败: " + e.getMessage()));
 		}
 	}
@@ -267,7 +267,7 @@ public class ModelInfoController implements BaseController {
 			data.put(modelId, launchConfig);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("获取模型启动配置时发生错误", e);
+			logger.info("获取模型启动配置时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型启动配置失败: " + e.getMessage()));
 		}
 	}
@@ -360,7 +360,7 @@ public class ModelInfoController implements BaseController {
 
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(savedData));
 		} catch (Exception e) {
-			logger.error("设置模型启动配置时发生错误", e);
+			logger.info("设置模型启动配置时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("设置模型启动配置失败: " + e.getMessage()));
 		}
 	}
@@ -434,7 +434,7 @@ public class ModelInfoController implements BaseController {
 			response.put("success", true);
 			LlamaServer.sendJsonResponse(ctx, response);
 		} catch (Exception e) {
-			logger.error("获取模型详情时发生错误", e);
+			logger.info("获取模型详情时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型详情失败: " + e.getMessage()));
 		}
 	}
@@ -466,7 +466,7 @@ public class ModelInfoController implements BaseController {
 			data.put("chatTemplate", chatTemplate);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("获取模型聊天模板时发生错误", e);
+			logger.info("获取模型聊天模板时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型聊天模板失败: " + e.getMessage()));
 		}
 	}
@@ -519,7 +519,7 @@ public class ModelInfoController implements BaseController {
 			}
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("设置模型聊天模板时发生错误", e);
+			logger.info("设置模型聊天模板时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("设置模型聊天模板失败: " + e.getMessage()));
 		}
 	}
@@ -558,7 +558,7 @@ public class ModelInfoController implements BaseController {
 			data.put("deleted", deleted);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("删除模型聊天模板时发生错误", e);
+			logger.info("删除模型聊天模板时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("删除模型聊天模板失败: " + e.getMessage()));
 		}
 	}
@@ -607,7 +607,7 @@ public class ModelInfoController implements BaseController {
 			data.put("chatTemplate", chatTemplate);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("获取模型默认聊天模板时发生错误", e);
+			logger.info("获取模型默认聊天模板时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型默认聊天模板失败: " + e.getMessage()));
 		}
 	}
@@ -637,7 +637,7 @@ public class ModelInfoController implements BaseController {
 			ApiResponse response = LlamaServerManager.getInstance().handleModelSlotsGet(modelId);
 			LlamaServer.sendJsonResponse(ctx, response);
 		} catch (Exception e) {
-			logger.error("获取模型slots信息时发生错误", e);
+			logger.info("获取模型slots信息时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型slots信息失败: " + e.getMessage()));
 		}
 	}
@@ -675,7 +675,7 @@ public class ModelInfoController implements BaseController {
 			// 响应消息。
 			LlamaServer.sendJsonResponse(ctx, response);
 		} catch (Exception e) {
-			logger.error("保存模型slots缓存时发生错误", e);
+			logger.info("保存模型slots缓存时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("保存模型slots缓存失败: " + e.getMessage()));
 		}
 	}
@@ -714,7 +714,7 @@ public class ModelInfoController implements BaseController {
 			// 响应消息。
 			LlamaServer.sendJsonResponse(ctx, response);
 		} catch (Exception e) {
-			logger.error("加载模型slots缓存时发生错误", e);
+			logger.info("加载模型slots缓存时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("加载模型slots缓存失败: " + e.getMessage()));
 		}
 	}
@@ -819,7 +819,7 @@ public class ModelInfoController implements BaseController {
 			String msg = responseBody == null || responseBody.isBlank() ? ("模型错误: HTTP " + responseCode) : responseBody;
 			LlamaServer.sendJsonErrorResponse(ctx, HttpResponseStatus.BAD_GATEWAY, msg);
 		} catch (Exception e) {
-			logger.error("tokenize失败", e);
+			logger.info("tokenize失败", e);
 			LlamaServer.sendJsonErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "tokenize失败: " + e.getMessage());
 		} finally {
 			if (connection != null) {
@@ -924,7 +924,7 @@ public class ModelInfoController implements BaseController {
 			String msg = responseBody == null || responseBody.isBlank() ? ("模型错误: HTTP " + responseCode) : responseBody;
 			LlamaServer.sendJsonErrorResponse(ctx, HttpResponseStatus.BAD_GATEWAY, msg);
 		} catch (Exception e) {
-			logger.error("apply-template失败", e);
+			logger.info("apply-template失败", e);
 			LlamaServer.sendJsonErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "apply-template失败: " + e.getMessage());
 		} finally {
 			if (connection != null) {

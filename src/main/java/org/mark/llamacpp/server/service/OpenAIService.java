@@ -19,11 +19,11 @@ import java.util.concurrent.Executors;
 import org.mark.llamacpp.gguf.GGUFModel;
 import org.mark.llamacpp.server.LlamaCppProcess;
 import org.mark.llamacpp.server.LlamaServerManager;
+import org.mark.llamacpp.server.tools.JsonUtil;
 import org.mark.llamacpp.server.LlamaCommandParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -54,8 +54,6 @@ public class OpenAIService {
 	
 	private static final Logger logger = LoggerFactory.getLogger(OpenAIService.class);
 	
-	private static final Gson gson = new Gson();
-
 	/**
 	 * 	存储当前通道正在处理的模型链接，用于在连接关闭时停止对应的模型进程
 	 */
@@ -182,10 +180,7 @@ public class OpenAIService {
 			response.put("data", openAIModels);
 			sendOpenAIJsonResponse(ctx, response);
 		} catch (Exception e) {
-			e.printStackTrace();
-			
-			System.err.println("处理OpenAI模型列表请求时发生错误");
-			
+			logger.info("处理OpenAI模型列表请求时发生错误", e);
 			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
 		}
 	}
@@ -211,8 +206,7 @@ public class OpenAIService {
 			}
 
 			// 解析JSON请求体
-			JsonObject requestJson = gson.fromJson(content, JsonObject.class);
-			System.err.println(requestJson);
+			JsonObject requestJson = JsonUtil.fromJson(content, JsonObject.class);
 
 			//System.exit(0);
 			// 获取模型名称
@@ -251,7 +245,7 @@ public class OpenAIService {
 			// 转发请求到对应的llama.cpp进程
 			this.forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/chat/completions", isStream, body);
 		} catch (Exception e) {
-			logger.error("处理OpenAI聊天补全请求时发生错误", e);
+			logger.info("处理OpenAI聊天补全请求时发生错误", e);
 			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
 		}
 	}
@@ -275,7 +269,7 @@ public class OpenAIService {
 			}
 
 			// 解析JSON请求体
-			JsonObject requestJson = gson.fromJson(content, JsonObject.class);
+			JsonObject requestJson = JsonUtil.fromJson(content, JsonObject.class);
 
 			// 获取LlamaServerManager实例
 			LlamaServerManager manager = LlamaServerManager.getInstance();
@@ -316,9 +310,9 @@ public class OpenAIService {
 				return;
 			}
 			// 转发请求到对应的llama.cpp进程
-			this.forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/completions", isStream, gson.toJson(requestJson));
+			this.forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/completions", isStream, JsonUtil.toJson(requestJson));
 		} catch (Exception e) {
-			logger.error("处理OpenAI文本补全请求时发生错误", e);
+			logger.info("处理OpenAI文本补全请求时发生错误", e);
 			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
 		}
 	}
@@ -337,7 +331,7 @@ public class OpenAIService {
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 400, null, "Request body is empty", "messages");
 				return;
 			}
-			JsonObject requestJson = gson.fromJson(content, JsonObject.class);
+			JsonObject requestJson = JsonUtil.fromJson(content, JsonObject.class);
 			LlamaServerManager manager = LlamaServerManager.getInstance();
 			String modelName = null;
 			if (!requestJson.has("model")) {
@@ -360,7 +354,7 @@ public class OpenAIService {
 			}
 			this.forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/embeddings", false, request.content().toString(StandardCharsets.UTF_8));
 		} catch (Exception e) {
-			logger.error("处理OpenAI嵌入请求时发生错误", e);
+			logger.info("处理OpenAI嵌入请求时发生错误", e);
 			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
 		}
 	}
@@ -487,7 +481,7 @@ public class OpenAIService {
 			if (parsed != null) {
 				boolean changed = ensureToolCallIds(parsed, null);
 				if (changed) {
-					responseBody = gson.toJson(parsed);
+					responseBody = JsonUtil.toJson(parsed);
 				}
 			}
 		}
@@ -557,8 +551,6 @@ public class OpenAIService {
 					break;
 				}
 				
-				logger.debug("收到流式数据行: {}", line);
-				
 				// 处理SSE格式的数据行
 				if (line.startsWith("data: ")) {
 					String data = line.substring(6); // 去掉 "data: " 前缀
@@ -574,7 +566,7 @@ public class OpenAIService {
 					if (parsed != null) {
 						boolean changed = ensureToolCallIds(parsed, toolCallIds);
 						if (changed) {
-							outLine = "data: " + gson.toJson(parsed);
+							outLine = "data: " + JsonUtil.toJson(parsed);
 						}
 					}
 					
@@ -592,7 +584,7 @@ public class OpenAIService {
 					// 检查写入是否失败，如果失败可能是客户端断开连接
 					future.addListener((ChannelFutureListener) channelFuture -> {
 						if (!channelFuture.isSuccess()) {
-							logger.warn("写入流式数据失败，可能是客户端断开连接: {}", channelFuture.cause().getMessage());
+							logger.info("写入流式数据失败，可能是客户端断开连接: {}", channelFuture.cause().getMessage());
 							ctx.close();
 						}
 					});
@@ -623,7 +615,7 @@ public class OpenAIService {
 			
 			logger.info("流式响应处理完成，共发送 {} 个数据块", chunkCount);
 		} catch (Exception e) {
-			logger.error("处理流式响应时发生错误", e);
+			logger.info("处理流式响应时发生错误", e);
 			// 检查是否是客户端断开连接导致的异常
 			if (e.getMessage() != null &&
 				(e.getMessage().contains("Connection reset by peer") ||
@@ -652,7 +644,7 @@ public class OpenAIService {
 			if (s == null || s.trim().isEmpty()) {
 				return null;
 			}
-			JsonElement el = gson.fromJson(s, JsonElement.class);
+			JsonElement el = JsonUtil.fromJson(s, JsonElement.class);
 			return el != null && el.isJsonObject() ? el.getAsJsonObject() : null;
 		} catch (Exception e) {
 			return null;
@@ -772,7 +764,7 @@ public class OpenAIService {
 	 * 发送OpenAI格式的JSON响应
 	 */
 	private void sendOpenAIJsonResponse(ChannelHandlerContext ctx, Object data) {
-		String json = gson.toJson(data);
+		String json = JsonUtil.toJson(data);
 		byte[] content = json.getBytes(StandardCharsets.UTF_8);
 
 		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
@@ -831,7 +823,7 @@ public class OpenAIService {
 	 * 发送OpenAI格式的JSON响应并清理资源
 	 */
 	private void sendOpenAIJsonResponseWithCleanup(ChannelHandlerContext ctx, Object data, HttpResponseStatus httpStatus) {
-		String json = gson.toJson(data);
+		String json = JsonUtil.toJson(data);
 		byte[] content = json.getBytes(StandardCharsets.UTF_8);
 
 		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, httpStatus);

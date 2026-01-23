@@ -130,7 +130,7 @@ public class ModelPathController implements BaseController {
 			data.put("count", items.size());
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("添加模型路径时发生错误", e);
+			logger.info("添加模型路径时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("添加模型路径失败: " + e.getMessage()));
 		}
 	}
@@ -179,7 +179,7 @@ public class ModelPathController implements BaseController {
 			data.put("changed", changed || before != (items == null ? 0 : items.size()));
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("移除模型路径时发生错误", e);
+			logger.info("移除模型路径时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("移除模型路径失败: " + e.getMessage()));
 		}
 	}
@@ -278,7 +278,7 @@ public class ModelPathController implements BaseController {
 			data.put("count", items.size());
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("更新模型路径时发生错误", e);
+			logger.info("更新模型路径时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("更新模型路径失败: " + e.getMessage()));
 		}
 	}
@@ -356,7 +356,7 @@ public class ModelPathController implements BaseController {
 			data.put("count", items == null ? 0 : items.size());
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("获取模型路径列表时发生错误", e);
+			logger.info("获取模型路径列表时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型路径列表失败: " + e.getMessage()));
 		}
 	}
@@ -397,7 +397,7 @@ public class ModelPathController implements BaseController {
 			try {
 				manager.listModel(true);
 			} catch (Exception e) {
-				logger.warn("刷新模型列表失败: {}", e.getMessage());
+				logger.info("刷新模型列表失败: {}", e.getMessage());
 			}
 		}
 	}

@@ -128,7 +128,7 @@ public class LlamacppController implements BaseController {
 			data.put("count", items.size());
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("添加llama.cpp路径时发生错误", e);
+			logger.info("添加llama.cpp路径时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("添加llama.cpp路径失败: " + e.getMessage()));
 		}
 	}
@@ -173,7 +173,7 @@ public class LlamacppController implements BaseController {
 			data.put("changed", changed || before != (items == null ? 0 : items.size()));
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("移除llama.cpp路径时发生错误", e);
+			logger.info("移除llama.cpp路径时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("移除llama.cpp路径失败: " + e.getMessage()));
 		}
 	}
@@ -202,7 +202,7 @@ public class LlamacppController implements BaseController {
 			data.put("count", items == null ? 0 : items.size());
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("获取llama.cpp路径列表时发生错误", e);
+			logger.info("获取llama.cpp路径列表时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取llama.cpp路径列表失败: " + e.getMessage()));
 		}
 	}
@@ -271,7 +271,7 @@ public class LlamacppController implements BaseController {
 			data.put("listDevices", devices);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("执行llama.cpp测试命令时发生错误", e);
+			logger.info("执行llama.cpp测试命令时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("执行llama.cpp测试失败: " + e.getMessage()));
 		}
 	}

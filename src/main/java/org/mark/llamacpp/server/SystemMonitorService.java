@@ -53,14 +53,14 @@ public class SystemMonitorService {
         // 检查脚本文件是否存在
         File scriptFile = new File(scriptPath);
         if (!scriptFile.exists() || !scriptFile.canExecute()) {
-            logger.error("系统监控脚本不存在或不可执行: {}", scriptPath);
+            logger.info("系统监控脚本不存在或不可执行: {}", scriptPath);
             // 尝试设置执行权限
             if (scriptFile.exists()) {
                 boolean success = scriptFile.setExecutable(true);
                 if (success) {
                     logger.info("成功设置脚本执行权限: {}", scriptPath);
                 } else {
-                    logger.error("无法设置脚本执行权限: {}", scriptPath);
+                    logger.info("无法设置脚本执行权限: {}", scriptPath);
                 }
             }
         }
@@ -86,7 +86,7 @@ public class SystemMonitorService {
      */
     public void start(int intervalSeconds) {
         if (started) {
-            logger.warn("系统监控服务已经启动");
+            logger.info("系统监控服务已经启动");
             return;
         }
         
@@ -115,7 +115,7 @@ public class SystemMonitorService {
      */
     public void stop() {
         if (!started) {
-            logger.warn("系统监控服务未启动");
+            logger.info("系统监控服务未启动");
             return;
         }
         
@@ -139,7 +139,7 @@ public class SystemMonitorService {
      */
     private void executeMonitorScript() {
         try {
-            logger.debug("执行系统监控脚本: {}", scriptPath);
+            logger.info("执行系统监控脚本: {}", scriptPath);
             
             // 执行脚本
             ProcessBuilder processBuilder = new ProcessBuilder("bash", scriptPath);
@@ -159,14 +159,14 @@ public class SystemMonitorService {
             // 等待进程完成
             int exitCode = process.waitFor();
             if (exitCode != 0) {
-                logger.error("监控脚本执行失败，退出码: {}", exitCode);
+                logger.info("监控脚本执行失败，退出码: {}", exitCode);
                 return;
             }
             
             // 解析JSON数据
             String jsonOutput = output.toString().trim();
             if (jsonOutput.isEmpty()) {
-                logger.warn("监控脚本输出为空");
+                logger.info("监控脚本输出为空");
                 return;
             }
             
@@ -178,15 +178,15 @@ public class SystemMonitorService {
             // 通过WebSocket广播数据
             webSocketManager.broadcast(message);
             
-            logger.debug("系统监控数据已通过WebSocket推送");
+            logger.info("系统监控数据已通过WebSocket推送");
             
         } catch (IOException e) {
-            logger.error("执行监控脚本时发生IO异常", e);
+            logger.info("执行监控脚本时发生IO异常", e);
         } catch (InterruptedException e) {
-            logger.error("执行监控脚本时被中断", e);
+            logger.info("执行监控脚本时被中断", e);
             Thread.currentThread().interrupt();
         } catch (Exception e) {
-            logger.error("执行监控脚本时发生未知错误", e);
+            logger.info("执行监控脚本时发生未知错误", e);
         }
     }
     
@@ -282,7 +282,7 @@ public class SystemMonitorService {
             return messageBuilder.toString();
             
         } catch (Exception e) {
-            logger.error("构建WebSocket消息时发生错误", e);
+            logger.info("构建WebSocket消息时发生错误", e);
             // 返回简单的错误消息
             return "{\"type\":\"systemMonitor\",\"error\":\"Failed to parse system data\",\"timestamp\":" + System.currentTimeMillis() + "}";
         }
@@ -296,7 +296,7 @@ public class SystemMonitorService {
             scheduler.submit(this::executeMonitorScript);
             logger.info("手动触发系统监控");
         } else {
-            logger.warn("系统监控服务未启动，无法手动触发");
+            logger.info("系统监控服务未启动，无法手动触发");
         }
     }
     

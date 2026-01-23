@@ -89,7 +89,7 @@ public class ToolController implements BaseController {
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 			return true;
 		} catch (Exception e) {
-			logger.error("执行工具失败", e);
+			logger.info("执行工具失败", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("执行工具失败: " + e.getMessage()));
 			return true;
 		}

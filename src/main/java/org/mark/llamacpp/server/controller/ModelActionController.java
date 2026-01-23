@@ -139,7 +139,7 @@ public class ModelActionController implements BaseController {
 			response.put("refreshed", true); // 标识这是刷新成功
 			LlamaServer.sendJsonResponse(ctx, response);
 		} catch (Exception e) {
-			logger.error("强制刷新模型列表时发生错误", e);
+			logger.info("强制刷新模型列表时发生错误", e);
 			Map<String, Object> errorResponse = new HashMap<>();
 			errorResponse.put("success", false);
 			errorResponse.put("error", "强制刷新模型列表失败: " + e.getMessage());
@@ -244,7 +244,7 @@ public class ModelActionController implements BaseController {
 			response.put("models", modelList);
 			LlamaServer.sendJsonResponse(ctx, response);
 		} catch (Exception e) {
-			logger.error("获取模型列表时发生错误", e);
+			logger.info("获取模型列表时发生错误", e);
 			Map<String, Object> errorResponse = new HashMap<>();
 			errorResponse.put("success", false);
 			errorResponse.put("error", "获取模型列表失败: " + e.getMessage());
@@ -295,7 +295,7 @@ public class ModelActionController implements BaseController {
 				LlamaServer.sendModelStopEvent(modelId, false, "模型停止失败或模型未加载");
 			}
 		} catch (Exception e) {
-			logger.error("停止模型时发生错误", e);
+			logger.info("停止模型时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("停止模型失败: " + e.getMessage()));
 		}
 	}
@@ -359,7 +359,7 @@ public class ModelActionController implements BaseController {
 			response.put("models", loadedModels);
 			LlamaServer.sendJsonResponse(ctx, response);
 		} catch (Exception e) {
-			logger.error("获取已加载模型时发生错误", e);
+			logger.info("获取已加载模型时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取已加载模型失败: " + e.getMessage()));
 		}
 	}
@@ -445,7 +445,7 @@ public class ModelActionController implements BaseController {
 			data.put("enableVision", enableVision);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("加载模型时发生错误", e);
+			logger.info("加载模型时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("加载模型失败: " + e.getMessage()));
 		}
 	}
@@ -591,12 +591,12 @@ public class ModelActionController implements BaseController {
 					}
 					data.put("savedPath", outFile.getAbsolutePath());
 				} catch (Exception ex) {
-					logger.warn("保存基准测试结果到文件失败", ex);
+					logger.info("保存基准测试结果到文件失败", ex);
 				}
 			}
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
-			logger.error("执行模型基准测试时发生错误", e);
+			logger.info("执行模型基准测试时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("执行模型基准测试失败: " + e.getMessage()));
 		}
 	}
@@ -809,7 +809,7 @@ public class ModelActionController implements BaseController {
 			}
 			connection.disconnect();
 		} catch (Exception e) {
-			logger.error("获取metrics时发生错误", e);
+			logger.info("获取metrics时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取metrics失败: " + e.getMessage()));
 		}
 	}
@@ -882,7 +882,7 @@ public class ModelActionController implements BaseController {
 			}
 			connection.disconnect();
 		} catch (Exception e) {
-			logger.error("获取props时发生错误", e);
+			logger.info("获取props时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取props失败: " + e.getMessage()));
 		}
 	}

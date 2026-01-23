@@ -140,7 +140,7 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 		} catch (RequestMethodException e) {
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error(e.getMessage()));
 		} catch (Exception e) {
-			logger.error("处理静态文件请求时发生错误", e);
+			logger.info("处理静态文件请求时发生错误", e);
 			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
 		}
 	}

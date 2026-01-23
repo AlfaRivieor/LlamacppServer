@@ -46,7 +46,7 @@ import io.netty.buffer.ByteBuf;
  */
 public class LlamaCommandParser {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(LlamaCommandParser.class);
+	private static final Logger logger = LoggerFactory.getLogger(LlamaCommandParser.class);
 	
 	private static final Gson gson = new Gson();
 
@@ -258,7 +258,7 @@ public class LlamaCommandParser {
 					out.add(textPart);
 				}
 			} catch (Exception e) {
-				LOGGER.warn("处理附件失败: {}", e.toString());
+				logger.info("处理附件失败: {}", e.toString());
 				JsonObject textPart = new JsonObject();
 				textPart.addProperty("type", "text");
 				textPart.addProperty("text", buildAttachmentText(name, "(附件读取失败: " + e.getMessage() + ")"));
@@ -513,7 +513,7 @@ public class LlamaCommandParser {
 			String content = sb.toString();
 			sendOpenAIResponse(ctx, modelId, content, isStream);
 		} catch (Exception e) {
-			LOGGER.error("保存slot缓存时发生错误", e);
+			logger.info("保存slot缓存时发生错误", e);
 			String content = LlamaServer.SLOTS_SAVE_KEYWORD + "-操作结果：" + e.toString();
 			sendOpenAIResponse(ctx, modelId, content, isStream);
 		}
@@ -553,7 +553,7 @@ public class LlamaCommandParser {
 			String content = sb.toString();
 			sendOpenAIResponse(ctx, modelId, content, isStream);
 		} catch (Exception e) {
-			LOGGER.error("加载slot缓存时发生错误", e);
+			logger.info("加载slot缓存时发生错误", e);
 			String content = LlamaServer.SLOTS_LOAD_KEYWORD + "-操作结果：" + e.toString();
 			sendOpenAIResponse(ctx, modelId, content, isStream);
 		}
@@ -744,7 +744,7 @@ public class LlamaCommandParser {
 				sendOpenAINonStreamResponse(ctx, modelId, content);
 			}
 		} catch (Exception e) {
-			LOGGER.error("发送OpenAI响应时发生错误", e);
+			logger.info("发送OpenAI响应时发生错误", e);
 			try {
 				sendOpenAINonStreamResponse(ctx, modelId, content);
 			} catch (Exception ignore) {

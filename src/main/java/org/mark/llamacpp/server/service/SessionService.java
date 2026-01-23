@@ -20,10 +20,11 @@ import io.netty.handler.codec.http.HttpMethod;
 /**
  * 	前端会话管理。暂时弃坑。
  */
+@Deprecated
 public class SessionService {
 
 	
-	private static Logger LOGGER = LoggerFactory.getLogger(SessionService.class);
+	private static Logger logger = LoggerFactory.getLogger(SessionService.class);
 	
 	
 	private static final List<ChatSession> chatSessions = new CopyOnWriteArrayList<>();
@@ -48,7 +49,7 @@ public class SessionService {
 			data.put("createdAt", createdAt);
 			return ApiResponse.success(data);
 		} catch (Exception e) {
-			LOGGER.error("创建会话失败", e);
+			logger.info("创建会话失败", e);
 			return ApiResponse.error("创建会话失败: " + e.getMessage());
 		}
 	}
@@ -69,7 +70,7 @@ public class SessionService {
 			data.put("sessions", sessions);
 			return ApiResponse.success(data);
 		} catch (Exception e) {
-			LOGGER.error("获取会话列表失败", e);
+			logger.info("获取会话列表失败", e);
 			return ApiResponse.error("获取会话列表失败: " + e.getMessage());
 		}
 	}
