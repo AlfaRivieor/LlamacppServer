@@ -2,12 +2,16 @@ package org.mark.llamacpp.server.controller;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.exception.RequestMethodException;
 import org.mark.llamacpp.server.mcp.McpClientService;
+import org.mark.llamacpp.server.mcp.TimeServer;
 import org.mark.llamacpp.server.service.ToolExecutionService;
 import org.mark.llamacpp.server.struct.ApiResponse;
 import org.mark.llamacpp.server.tools.JsonUtil;
@@ -44,6 +48,18 @@ public class ToolController implements BaseController {
 	private static final String PATH_MCP_TOOLS = "/api/mcp/tools";
 	/** 移除 MCP 服务 API 路径 */
 	private static final String PATH_MCP_REMOVE = "/api/mcp/remove";
+
+	private static final String TOOL_BUILTIN_WEB_SEARCH = "builtin_web_search";
+	private static final String TOOL_GET_CURRENT_TIME = "get_current_time";
+	private static final String TOOL_CONVERT_TIME = "convert_time";
+	private static final Map<String, Function<BuiltinToolRequest, String>> SPECIAL_TOOL_EXECUTORS = Map.of(
+			TOOL_BUILTIN_WEB_SEARCH, ToolController::executeBuiltinWebSearchToText,
+			TOOL_GET_CURRENT_TIME, ToolController::executeTimeToolToText,
+			TOOL_CONVERT_TIME, ToolController::executeTimeToolToText
+	);
+	private static final Set<String> SPECIAL_TOOL_NAMES = SPECIAL_TOOL_EXECUTORS.keySet();
+
+	private record BuiltinToolRequest(String toolName, String toolArguments, String preparedQuery) {}
 	
 	/**
 	 * 实现 BaseController 的 handleRequest 方法，分发不同的工具相关请求。
@@ -107,20 +123,9 @@ public class ToolController implements BaseController {
 
 			String toolArguments = extractToolArguments(obj);
 
-			// 5. 特殊处理内置工具：网页搜索
-			if ("builtin_web_search".equals(toolName)) {
-				String tn = toolName;
-				String ta = toolArguments;
-				String pq = preparedQuery;
-				ioExecutor.execute(() -> {
-					try {
-						String out = toolExecutionService.executeToText(tn, ta, pq);
-						LlamaServer.sendJsonResponse(ctx, ApiResponse.success(contentData(out == null ? "" : out)));
-					} catch (Exception e) {
-						logger.info("执行工具失败", e);
-						LlamaServer.sendJsonResponse(ctx, ApiResponse.error("执行工具失败: " + e.getMessage()));
-					}
-				});
+			// 5. 特殊处理内置工具
+			if (isSpecialBuiltinTool(toolName)) {
+				dispatchSpecialBuiltinTool(ctx, toolName, toolArguments, preparedQuery);
 				return;
 			}
 
@@ -146,6 +151,47 @@ public class ToolController implements BaseController {
 			logger.info("执行工具失败", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("执行工具失败: " + e.getMessage()));
 		}
+	}
+
+	private static boolean isSpecialBuiltinTool(String toolName) {
+		return toolName != null && SPECIAL_TOOL_NAMES.contains(toolName);
+	}
+
+	private static void dispatchSpecialBuiltinTool(ChannelHandlerContext ctx, String toolName, String toolArguments, String preparedQuery) {
+		String tn = toolName;
+		String ta = toolArguments;
+		String pq = preparedQuery;
+		ioExecutor.execute(() -> {
+			try {
+				String out = executeSpecialBuiltinToolToText(tn, ta, pq);
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.success(contentData(out == null ? "" : out)));
+			} catch (Exception e) {
+				logger.info("执行工具失败", e);
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("执行工具失败: " + e.getMessage()));
+			}
+		});
+	}
+
+	private static String executeSpecialBuiltinToolToText(String toolName, String toolArguments, String preparedQuery) {
+		String tn = trimToNull(toolName);
+		if (tn == null) {
+			throw new IllegalArgumentException("toolName不能为空");
+		}
+		Function<BuiltinToolRequest, String> executor = SPECIAL_TOOL_EXECUTORS.get(tn);
+		if (executor == null) {
+			throw new IllegalStateException("未找到内置工具执行器: " + tn);
+		}
+		return executor.apply(new BuiltinToolRequest(tn, toolArguments, preparedQuery));
+	}
+
+	private static String executeBuiltinWebSearchToText(BuiltinToolRequest req) {
+		Objects.requireNonNull(req);
+		return toolExecutionService.executeToText(req.toolName(), req.toolArguments(), req.preparedQuery());
+	}
+
+	private static String executeTimeToolToText(BuiltinToolRequest req) {
+		Objects.requireNonNull(req);
+		return TimeServer.executeToText(req.toolName(), req.toolArguments());
 	}
 
 	/**

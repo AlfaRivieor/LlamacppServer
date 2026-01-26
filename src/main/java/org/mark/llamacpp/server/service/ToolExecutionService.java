@@ -3,6 +3,7 @@ package org.mark.llamacpp.server.service;
 import java.io.IOException;
 
 import org.mark.llamacpp.server.mcp.McpClientService;
+import org.mark.llamacpp.server.mcp.ZhipuWebSearchService;
 import org.mark.llamacpp.server.tools.JsonUtil;
 
 import com.google.gson.JsonArray;

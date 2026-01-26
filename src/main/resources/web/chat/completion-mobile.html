@@ -33,6 +33,11 @@
           <select id="modelSelect"></select>
           <button id="refreshModels" class="btn" type="button">刷新</button>
         </div>
+        <div>
+        	<button id="kvCacheToggle" class="btn icon-btn ghost" type="button" title="KV缓存管理">💾</button>
+        	<button id="mcpToolsToggle" class="btn icon-btn ghost" type="button" title="MCP 工具">🔌</button>
+        </div>
+        
         <div class="toggle">
           <input id="autoScroll" type="checkbox" checked />
           <label for="autoScroll" class="hint">自动滚动</label>
@@ -50,7 +55,7 @@
           <label for="webSearchToggle" class="hint">联网搜索</label>
         </div>
         <button id="clearChat" class="btn" type="button">清空</button>
-        <button id="kvCacheToggle" class="btn icon-btn ghost" type="button" title="KV缓存管理">💾</button>
+        
       </div>
 
       <div id="settingsPanel" class="settings">
@@ -128,14 +133,6 @@
             <label for="assistantSuffix">助手消息后缀</label>
             <textarea id="assistantSuffix" placeholder="可选"></textarea>
           </div>
-          <div class="setting long-setting">
-            <label>MCP 工具</label>
-            <div class="mcp-tools-actions">
-              <button id="refreshMcpTools" class="btn" type="button">刷新</button>
-              <span id="mcpToolsStatus" class="hint"></span>
-            </div>
-            <div id="mcpToolsList" class="mcp-tools"></div>
-          </div>
         </div>
       </div>
 
@@ -208,6 +205,27 @@
         </div>
         <div class="modal-actions">
           <button id="kvCacheCancel" class="btn" type="button">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="mcpToolsModal" class="modal-wrap" aria-hidden="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div class="modal-title">MCP 工具</div>
+          <button id="mcpToolsClose" class="btn icon-btn" type="button" aria-label="关闭">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="long-setting">
+            <div class="mcp-tools-actions">
+              <button id="refreshMcpTools" class="btn" type="button">刷新</button>
+              <span id="mcpToolsStatus" class="hint"></span>
+            </div>
+            <div id="mcpToolsList" class="mcp-tools"></div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="mcpToolsDone" class="btn primary" type="button">完成</button>
         </div>
       </div>
     </div>
