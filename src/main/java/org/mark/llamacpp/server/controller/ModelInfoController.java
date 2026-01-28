@@ -10,13 +10,16 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFMetaDataReader;
 import org.mark.llamacpp.gguf.GGUFModel;
 import org.mark.llamacpp.server.ConfigManager;
+import org.mark.llamacpp.server.LlamaCppProcess;
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.exception.RequestMethodException;
@@ -54,6 +57,13 @@ public class ModelInfoController implements BaseController {
 	
 	@Override
 	public boolean handleRequest(String uri, ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		
+		// 获取模型。
+		if(uri.startsWith("/api/models/list")) {
+			this.handleOpenAIModelsRequest(ctx, request);
+			return true;
+		}
+		
 		// 设置模型的别名
 		if (uri.startsWith("/api/models/alias/set")) {
 			this.handleSetModelAliasRequest(ctx, request);
@@ -130,6 +140,119 @@ public class ModelInfoController implements BaseController {
 		return false;
 	}
 	
+	
+	/**
+	 * 	处理模型列表请求
+	 * 	/api/models
+	 * 	
+	 * @param ctx
+	 * @param request
+	 * @throws RequestMethodException 
+	 */
+	private void handleOpenAIModelsRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {			
+		// 断言一下请求方式
+		this.assertRequestMethod(request.method() != HttpMethod.GET, "只支持GET请求");
+		try {
+			// 获取LlamaServerManager实例
+			LlamaServerManager manager = LlamaServerManager.getInstance();
+			
+			// 获取已加载的进程信息
+			Map<String, LlamaCppProcess> loadedProcesses = manager.getLoadedProcesses();
+			
+			// 获取所有模型信息
+			List<GGUFModel> allModels = manager.listModel();
+			
+			// 构建OpenAI格式的模型列表
+			List<Map<String, Object>> openAIModels = new ArrayList<>();
+			
+			for (Map.Entry<String, LlamaCppProcess> entry : loadedProcesses.entrySet()) {
+				String modelId = entry.getKey();
+				// 查找对应的模型信息
+				GGUFModel modelInfo = null;
+				for (GGUFModel model : allModels) {
+					if (model.getModelId().equals(modelId)) {
+						modelInfo = model;
+						break;
+					}
+				}
+				
+				// 构建OpenAI格式的模型信息
+				Map<String, Object> modelData = new HashMap<>();
+				modelData.put("id", modelId);
+				modelData.put("object", "model");
+				modelData.put("created", System.currentTimeMillis() / 1000);
+				modelData.put("owned_by", "organization_owner");
+				
+				// 添加模型详细信息（如果可用）
+				if (modelInfo != null) {
+					// 添加模型名称
+					String modelName = "未知模型";
+					if (modelInfo.getPrimaryModel() != null) {
+						modelName = modelInfo.getName(); //modelInfo.getPrimaryModel().getStringValue("general.name");
+						if (modelName == null || modelName.trim().isEmpty()) {
+							modelName = "未命名模型";
+						}
+					}
+					modelData.put("name", modelName);
+					
+					// 添加模型路径
+					modelData.put("path", modelInfo.getPath());
+					
+					// 添加模型大小
+					modelData.put("size", modelInfo.getSize());
+					
+					// 添加模型架构信息
+					if (modelInfo.getPrimaryModel() != null) {
+						String architecture = modelInfo.getPrimaryModel().getStringValue("general.architecture");
+						if (architecture != null) {
+							modelData.put("architecture", architecture);
+						}
+						
+						// 添加上下文长度
+						Integer contextLength = modelInfo.getPrimaryModel().getIntValue(architecture + ".context_length");
+						if (contextLength != null) {
+							modelData.put("context_length", contextLength);
+						}
+					}
+					
+					// 添加多模态信息
+					if (modelInfo.getMmproj() != null) {
+						modelData.put("multimodal", true);
+					}
+				}
+				
+				// 添加模型根权限信息
+				List<String> permissions = new ArrayList<>();
+				permissions.add("model");
+				modelData.put("permission", permissions);
+				
+				// 添加模型基础信息
+				Map<String, Object> root = new HashMap<>();
+				root.put("id", modelId);
+				root.put("object", "model");
+				root.put("created", System.currentTimeMillis() / 1000);
+				root.put("owned_by", "llamacpp-server");
+				modelData.put("root", root);
+				
+				// 添加模型父信息
+				Map<String, Object> parent = new HashMap<>();
+				parent.put("id", modelId);
+				parent.put("object", "model");
+				modelData.put("parent", parent);
+				
+				openAIModels.add(modelData);
+			}
+			
+			// 构建OpenAI格式的响应
+			Map<String, Object> response = new HashMap<>();
+			response.put("object", "list");
+			response.put("data", openAIModels);
+			LlamaServer.sendJsonResponse(ctx, response);
+		} catch (Exception e) {
+			logger.info("获取模型列表时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型列表时发生错误: " + e.getMessage()));
+		}
+	}
 	
 	/**
 	 * 修改别名。

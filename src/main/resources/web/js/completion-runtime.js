@@ -1020,7 +1020,7 @@ async function loadModels() {
   try {
     setStatus('加载模型…');
     els.refreshModels.disabled = true;
-    const data = await fetchJson('/v1/models', { method: 'GET' });
+    const data = await fetchJson('/api/models/list', { method: 'GET' });
     const models = Array.isArray(data?.data) ? data.data : [];
     const current = els.modelSelect.value;
     els.modelSelect.innerHTML = '';

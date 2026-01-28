@@ -8,15 +8,18 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.mark.llamacpp.gguf.GGUFModel;
 import org.mark.llamacpp.server.LlamaCppProcess;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.tools.JsonUtil;
@@ -64,6 +67,7 @@ public class OpenAIService {
 	 */
 	private static final ExecutorService worker = Executors.newVirtualThreadPerTaskExecutor();
 
+	private SimpleDateFormat sdf = new SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss 'GMT'", Locale.ENGLISH);
 	
 	public OpenAIService() {
 		
@@ -90,86 +94,16 @@ public class OpenAIService {
 			// 获取已加载的进程信息
 			Map<String, LlamaCppProcess> loadedProcesses = manager.getLoadedProcesses();
 			
-			// 获取所有模型信息
-			List<GGUFModel> allModels = manager.listModel();
-			
 			// 构建OpenAI格式的模型列表
 			List<Map<String, Object>> openAIModels = new ArrayList<>();
 			
 			for (Map.Entry<String, LlamaCppProcess> entry : loadedProcesses.entrySet()) {
 				String modelId = entry.getKey();
-				// 查找对应的模型信息
-				GGUFModel modelInfo = null;
-				for (GGUFModel model : allModels) {
-					if (model.getModelId().equals(modelId)) {
-						modelInfo = model;
-						break;
-					}
-				}
-				
 				// 构建OpenAI格式的模型信息
 				Map<String, Object> modelData = new HashMap<>();
 				modelData.put("id", modelId);
 				modelData.put("object", "model");
-				modelData.put("created", System.currentTimeMillis() / 1000);
-				modelData.put("owned_by", "llamacpp-server");
-				
-				// 添加模型详细信息（如果可用）
-				if (modelInfo != null) {
-					// 添加模型名称
-					String modelName = "未知模型";
-					if (modelInfo.getPrimaryModel() != null) {
-						modelName = modelInfo.getName(); //modelInfo.getPrimaryModel().getStringValue("general.name");
-						if (modelName == null || modelName.trim().isEmpty()) {
-							modelName = "未命名模型";
-						}
-					}
-					modelData.put("name", modelName);
-					
-					// 添加模型路径
-					modelData.put("path", modelInfo.getPath());
-					
-					// 添加模型大小
-					modelData.put("size", modelInfo.getSize());
-					
-					// 添加模型架构信息
-					if (modelInfo.getPrimaryModel() != null) {
-						String architecture = modelInfo.getPrimaryModel().getStringValue("general.architecture");
-						if (architecture != null) {
-							modelData.put("architecture", architecture);
-						}
-						
-						// 添加上下文长度
-						Integer contextLength = modelInfo.getPrimaryModel().getIntValue(architecture + ".context_length");
-						if (contextLength != null) {
-							modelData.put("context_length", contextLength);
-						}
-					}
-					
-					// 添加多模态信息
-					if (modelInfo.getMmproj() != null) {
-						modelData.put("multimodal", true);
-					}
-				}
-				
-				// 添加模型根权限信息
-				List<String> permissions = new ArrayList<>();
-				permissions.add("model");
-				modelData.put("permission", permissions);
-				
-				// 添加模型基础信息
-				Map<String, Object> root = new HashMap<>();
-				root.put("id", modelId);
-				root.put("object", "model");
-				root.put("created", System.currentTimeMillis() / 1000);
-				root.put("owned_by", "llamacpp-server");
-				modelData.put("root", root);
-				
-				// 添加模型父信息
-				Map<String, Object> parent = new HashMap<>();
-				parent.put("id", modelId);
-				parent.put("object", "model");
-				modelData.put("parent", parent);
+				modelData.put("owned_by", "organization_owner");
 				
 				openAIModels.add(modelData);
 			}
@@ -494,14 +428,16 @@ public class OpenAIService {
 		
 		// 设置响应头
 		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
-		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, responseBody.getBytes(StandardCharsets.UTF_8).length);
+		byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
+		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, responseBytes.length);
+		response.headers().set(HttpHeaderNames.ETAG, buildEtag(responseBytes));
 		// 添加CORS头
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization");
 		
 		// 设置响应体
-		response.content().writeBytes(responseBody.getBytes(StandardCharsets.UTF_8));
+		response.content().writeBytes(responseBytes);
 		
 		// 发送响应
 		ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
@@ -523,6 +459,7 @@ public class OpenAIService {
 		response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
+		response.headers().set(HttpHeaderNames.ETAG, buildEtag((modelName + ":" + responseCode + ":" + System.nanoTime()).getBytes(StandardCharsets.UTF_8)));
 		
 		// 发送响应头
 		ctx.write(response);
@@ -760,6 +697,22 @@ public class OpenAIService {
 		}
 	}
 
+	private static String buildEtag(byte[] content) {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			byte[] hash = digest.digest(content == null ? new byte[0] : content);
+			StringBuilder sb = new StringBuilder(hash.length * 2 + 2);
+			sb.append('"');
+			for (byte b : hash) {
+				sb.append(String.format("%02x", b));
+			}
+			sb.append('"');
+			return sb.toString();
+		} catch (Exception e) {
+			return "\"" + UUID.randomUUID().toString().replace("-", "") + "\"";
+		}
+	}
+
 	/**
 	 * 发送OpenAI格式的JSON响应
 	 */
@@ -768,12 +721,17 @@ public class OpenAIService {
 		byte[] content = json.getBytes(StandardCharsets.UTF_8);
 
 		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
-		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
+		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=utf-8");
 		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
+		response.headers().set(HttpHeaderNames.ETAG, buildEtag(content));
+		response.headers().set("X-Powered-By", "Express");
 		// 添加CORS头
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization");
+		//response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
+		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
+		response.headers().set(HttpHeaderNames.CONNECTION, "alive");
+		response.headers().set(HttpHeaderNames.DATE, this.sdf.format(new Date()));
+		
 		response.content().writeBytes(content);
 
 		ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
@@ -827,12 +785,18 @@ public class OpenAIService {
 		byte[] content = json.getBytes(StandardCharsets.UTF_8);
 
 		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, httpStatus);
-		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
+		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=utf-8");
 		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
+		response.headers().set(HttpHeaderNames.ETAG, buildEtag(content));
+		response.headers().set("X-Powered-By", "Express");
 		// 添加CORS头
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization");
+		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
+		response.headers().set(HttpHeaderNames.CONNECTION, "alive");
+		response.headers().set(HttpHeaderNames.DATE, this.sdf.format(new Date()));
+		
+		
 		response.content().writeBytes(content);
 
 		ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
