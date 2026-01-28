@@ -11,6 +11,7 @@ import java.util.concurrent.Executors;
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.controller.BaseController;
 import org.mark.llamacpp.server.controller.HuggingFaceController;
+import org.mark.llamacpp.server.controller.LMStudioController;
 import org.mark.llamacpp.server.controller.LlamacppController;
 import org.mark.llamacpp.server.controller.ModelActionController;
 import org.mark.llamacpp.server.controller.ModelInfoController;
@@ -46,6 +47,7 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 	
 	static {
 		pipeline.add(new HuggingFaceController());
+		pipeline.add(new LMStudioController());
 		pipeline.add(new LlamacppController());
 		pipeline.add(new ModelActionController());
 		pipeline.add(new ModelInfoController());
@@ -85,7 +87,9 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			return;
 		}
 		String uri = request.uri();
-		//logger.info("收到请求: {} {}", request.method().name(), uri);
+		logger.info("收到请求: {} {}", request.method().name(), uri);
+		//logger.info("请求内容：{}", new String(request.content().array()));
+		logger.info("请求头：{}", request.headers());
 		// 傻逼浏览器不知道为什么一直在他妈的访问/.well-known/appspecific/com.chrome.devtools.json
 		if ("/.well-known/appspecific/com.chrome.devtools.json".equals(uri)) {
 			ctx.close();
