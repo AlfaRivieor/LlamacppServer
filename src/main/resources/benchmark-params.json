@@ -249,8 +249,8 @@
     "fullName": "--direct-io",
     "abbreviation": "-dio",
     "type": "STRING",
-    "defaultValue": "0",
-    "description": "是否弃用DirectIO，影响模型的加载速度。",
+    "defaultValue": "1",
+    "description": "是否启用DirectIO，影响模型的加载速度。默认开启，llamacpp的这项功能可能会存在问题，如果出现加载问题请关闭。",
     "values": [
 	    "0",
 	    "1"

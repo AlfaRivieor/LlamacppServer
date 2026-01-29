@@ -225,12 +225,17 @@
     "sort": 21
   },
   {
-    "name": "禁用DirectIO",
-    "fullName": "--no-direct-io",
-    "abbreviation": "-ndio",
-    "type": "LOGIC",
-    "defaultValue": "0",
-    "description": "禁用DirectIO，vulkan后端需要禁用这个选项，否则会无法加载模型。",
+    "name": "DirectIO",
+	"fullName": "",
+	"abbreviation": "",
+	"type": "STRING",
+	"defaultValue": "default",
+	"description": "是否启用DirectIO，影响模型的加载速度。默认开启，llamacpp的这项功能可能会存在问题，如果出现加载问题请关闭。",
+	"values": [
+		"default",
+	    "-ndio",
+	    "-dio"
+	],
     "sort": 22
   },
   {

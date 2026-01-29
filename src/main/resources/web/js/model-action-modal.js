@@ -117,6 +117,23 @@ function fieldNameFromFullName(fullName) {
     return v.replace(/^--/, '').replace(/^-/, '');
 }
 
+function sanitizeFieldKeyPart(v) {
+    const s = v === null || v === undefined ? '' : String(v).trim();
+    if (!s) return '';
+    return s.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function fieldNameFromParamConfig(p) {
+    if (!p) return '';
+    const fullName = p.fullName === null || p.fullName === undefined ? '' : String(p.fullName).trim();
+    if (fullName) return fieldNameFromFullName(fullName);
+    const abbr = p.abbreviation === null || p.abbreviation === undefined ? '' : String(p.abbreviation).trim();
+    if (abbr) return fieldNameFromFullName(abbr);
+    const base = sanitizeFieldKeyPart(p.name);
+    const sortRaw = p.sort === null || p.sort === undefined ? '' : String(p.sort).trim();
+    return 'unnamed_' + (base || 'param') + (sortRaw ? '_' + sortRaw : '');
+}
+
 function isTruthyLogicValue(value) {
     if (value === null || value === undefined) return false;
     const v = String(value).trim().toLowerCase();
@@ -179,10 +196,56 @@ function buildOptionLookupFromParamConfig(cfgList) {
     return lookup;
 }
 
+function buildAllowedBareTokenSetFromParamConfig(cfgList) {
+    const set = new Set();
+    for (let i = 0; i < cfgList.length; i++) {
+        const p = cfgList[i];
+        if (!p) continue;
+        const type = (p.type === null || p.type === undefined) ? 'STRING' : String(p.type);
+        if (String(type).toUpperCase() !== 'STRING') continue;
+        const fullName = p.fullName === null || p.fullName === undefined ? '' : String(p.fullName).trim();
+        const abbr = p.abbreviation === null || p.abbreviation === undefined ? '' : String(p.abbreviation).trim();
+        if (fullName || abbr) continue;
+        const values = Array.isArray(p.values)
+            ? p.values.map(v => (v === null || v === undefined) ? '' : String(v).trim()).filter(v => v.length > 0)
+            : [];
+        for (let j = 0; j < values.length; j++) {
+            const v = values[j];
+            if (v && v.startsWith('-')) set.add(v);
+        }
+    }
+    return set;
+}
+
+function isOptionLikeToken(token) {
+    if (!token) return false;
+    const t = String(token).trim();
+    if (t.length < 2) return false;
+    if (!t.startsWith('-')) return false;
+    return /^-{1,2}\S+/.test(t);
+}
+
+function sanitizeExtraParamTokens(tokens, optionLookup, allowedBareTokens) {
+    const out = [];
+    for (let i = 0; i < tokens.length; i++) {
+        const t = tokens[i] === null || tokens[i] === undefined ? '' : String(tokens[i]).trim();
+        if (!t) continue;
+        if (isOptionLikeToken(t) && !optionLookup[t] && !(allowedBareTokens && allowedBareTokens.has(t))) {
+            const next = (i + 1) < tokens.length ? tokens[i + 1] : null;
+            const nextStr = next === null || next === undefined ? '' : String(next).trim();
+            if (nextStr && !isOptionLikeToken(nextStr)) i++;
+            continue;
+        }
+        out.push(t);
+    }
+    return out;
+}
+
 function applyCmdToDynamicFields(modal, cmd) {
     const cfgList = getParamConfigListSafe();
     if (!cfgList.length) return;
     const optionLookup = buildOptionLookupFromParamConfig(cfgList);
+    const allowedBareTokens = buildAllowedBareTokenSetFromParamConfig(cfgList);
     const tokens = splitCmdArgs(cmd);
     const consumed = new Array(tokens.length).fill(false);
     const valuesByField = Object.create(null);
@@ -235,6 +298,37 @@ function applyCmdToDynamicFields(modal, cmd) {
         const p = cfgList[i];
         if (!p) continue;
         const type = (p.type === null || p.type === undefined) ? 'STRING' : String(p.type);
+        if (String(type).toUpperCase() !== 'STRING') continue;
+        const fullName = p.fullName === null || p.fullName === undefined ? '' : String(p.fullName).trim();
+        const abbr = p.abbreviation === null || p.abbreviation === undefined ? '' : String(p.abbreviation).trim();
+        if (fullName || abbr) continue;
+        const values = Array.isArray(p.values) ? p.values.map(v => (v === null || v === undefined) ? '' : String(v).trim()).filter(v => v.length > 0) : [];
+        if (!values.length) continue;
+        const defaultValue = p.defaultValue === null || p.defaultValue === undefined ? values[0] : String(p.defaultValue).trim();
+        const candidates = values.filter(v => v !== defaultValue);
+
+        let picked = defaultValue;
+        if (candidates.length) {
+            for (let ti = 0; ti < tokens.length; ti++) {
+                if (consumed[ti]) continue;
+                const t = tokens[ti] === null || tokens[ti] === undefined ? '' : String(tokens[ti]).trim();
+                if (!t) continue;
+                if (candidates.includes(t)) {
+                    picked = t;
+                    consumed[ti] = true;
+                    break;
+                }
+            }
+        }
+
+        const fieldName = fieldNameFromParamConfig(p);
+        if (fieldName) valuesByField[fieldName] = picked;
+    }
+
+    for (let i = 0; i < cfgList.length; i++) {
+        const p = cfgList[i];
+        if (!p) continue;
+        const type = (p.type === null || p.type === undefined) ? 'STRING' : String(p.type);
         if (type.toUpperCase() !== 'LOGIC') continue;
         const fullName = p.fullName === null || p.fullName === undefined ? '' : String(p.fullName);
         const fieldName = fieldNameFromFullName(fullName);
@@ -251,8 +345,14 @@ function applyCmdToDynamicFields(modal, cmd) {
     const extras = [];
     for (let i = 0; i < tokens.length; i++) {
         if (consumed[i]) continue;
-        const t = tokens[i];
+        const t = tokens[i] === null || tokens[i] === undefined ? '' : String(tokens[i]).trim();
         if (!t) continue;
+        if (isOptionLikeToken(t) && !optionLookup[t] && !allowedBareTokens.has(t)) {
+            const next = (i + 1) < tokens.length ? tokens[i + 1] : null;
+            const nextStr = next === null || next === undefined ? '' : String(next).trim();
+            if (nextStr && !isOptionLikeToken(nextStr)) i++;
+            continue;
+        }
         extras.push(quoteArgIfNeeded(t));
     }
     const extraStr = extras.join(' ').trim();
@@ -430,30 +530,58 @@ function buildLoadModelPayload(modal) {
         const p = cfgList[i];
         if (!p) continue;
         const fullName = p.fullName === null || p.fullName === undefined ? '' : String(p.fullName);
-        if (!fullName) continue;
+        const abbr = p.abbreviation === null || p.abbreviation === undefined ? '' : String(p.abbreviation);
         const type = p.type === null || p.type === undefined ? 'STRING' : String(p.type);
-        const fieldName = fieldNameFromFullName(fullName);
+        const typeUpper = String(type).toUpperCase();
+        const fullNameTrimmed = fullName.trim();
+        const abbrTrimmed = abbr.trim();
+
+        if (typeUpper === 'STRING' && !fullNameTrimmed && !abbrTrimmed) {
+            const values = Array.isArray(p.values) ? p.values.map(v => (v === null || v === undefined) ? '' : String(v)) : [];
+            if (!values.length) continue;
+            const defaultValue = p.defaultValue === null || p.defaultValue === undefined ? (values.length ? String(values[0]) : '') : String(p.defaultValue);
+            const fieldName = fieldNameFromParamConfig(p);
+            if (!fieldName) continue;
+            const el = findFieldByName(modal, fieldName) || findById(modal, 'param_' + fieldName);
+            if (!el || !('value' in el)) continue;
+            const selected = String(el.value || '').trim();
+            const defaultTrimmed = String(defaultValue || '').trim();
+            if (!selected) continue;
+            if (defaultTrimmed && selected === defaultTrimmed) continue;
+            if (values.some(v => String(v).trim() === selected)) {
+                cmdParts.push(quoteArgIfNeeded(selected));
+            }
+            continue;
+        }
+
+        if (!fullNameTrimmed) continue;
+        const fieldName = fieldNameFromFullName(fullNameTrimmed);
         if (!fieldName) continue;
 
         const el = findFieldByName(modal, fieldName);
         if (!el || !('value' in el)) continue;
         const rawValue = String(el.value || '');
 
-        if (String(type).toUpperCase() === 'LOGIC') {
+        if (typeUpper === 'LOGIC') {
             if (isTruthyLogicValue(rawValue)) {
-                cmdParts.push(fullName);
+                cmdParts.push(fullNameTrimmed);
             }
             continue;
         }
 
         const trimmed = rawValue.trim();
         if (!trimmed) continue;
-        cmdParts.push(fullName, quoteArgIfNeeded(trimmed));
+        cmdParts.push(fullNameTrimmed, quoteArgIfNeeded(trimmed));
     }
 
     const extraParams = getFieldString(modal, ['extraParams']).trim();
     if (extraParams) {
-        cmdParts.push(extraParams);
+        const optionLookup = buildOptionLookupFromParamConfig(cfgList);
+        const allowedBareTokens = buildAllowedBareTokenSetFromParamConfig(cfgList);
+        const tokens = splitCmdArgs(extraParams);
+        const sanitized = sanitizeExtraParamTokens(tokens, optionLookup, allowedBareTokens).map(quoteArgIfNeeded).filter(Boolean);
+        const sanitizedStr = sanitized.join(' ').trim();
+        if (sanitizedStr) cmdParts.push(sanitizedStr);
     }
 
     return {

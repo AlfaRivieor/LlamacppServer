@@ -717,7 +717,17 @@
         }
 
         function renderParamField(param) {
-            const fieldName = param.fullName.replace(/^--/, '').replace(/^-/, '');
+            const fullNameRaw = param.fullName == null ? '' : String(param.fullName);
+            const abbrRaw = param.abbreviation == null ? '' : String(param.abbreviation);
+            let fieldName = fullNameRaw.replace(/^--/, '').replace(/^-/, '');
+            if (!fieldName) fieldName = abbrRaw.replace(/^--/, '').replace(/^-/, '');
+            if (!fieldName) {
+                const base = (param.name == null ? '' : String(param.name)).trim()
+                    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+                    .replace(/^_+|_+$/g, '');
+                const sortRaw = param.sort == null ? '' : String(param.sort).trim();
+                fieldName = 'unnamed_' + (base || 'param') + (sortRaw ? '_' + sortRaw : '');
+            }
             const fieldId = 'param_' + fieldName;
             const displayName = param.name;
             const description = param.description || '';
