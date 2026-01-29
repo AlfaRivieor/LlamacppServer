@@ -24,6 +24,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -68,6 +70,7 @@ import io.netty.handler.codec.http.LastHttpContent;
 public class OllamaService {
 	
 	private static final Logger logger = LoggerFactory.getLogger(OllamaService.class);
+	private final ExecutorService worker = Executors.newCachedThreadPool();
 	
 	private static final ZoneId DEFAULT_ZONE = ZoneId.systemDefault();
 	private static final DateTimeFormatter OLLAMA_TIME_FORMATTER = new DateTimeFormatterBuilder()
@@ -452,14 +455,16 @@ public class OllamaService {
 		}
 		
 		LlamaServerManager manager = LlamaServerManager.getInstance();
-		String modelName = JsonUtil.getJsonString(ollamaReq, "model", null);
+		final String modelName = JsonUtil.getJsonString(ollamaReq, "model", null);
 		if (modelName == null || modelName.isBlank()) {
-			if (manager.getLoadedProcesses().size() == 1) {
-				modelName = manager.getFirstModelName();
-			} else {
-				sendOllamaError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing required parameter: model");
-				return;
-			}
+//			if (manager.getLoadedProcesses().size() == 1) {
+//				modelName = manager.getFirstModelName();
+//			} else {
+//				sendOllamaError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing required parameter: model");
+//				return;
+//			}
+			sendOllamaError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing required parameter: model");
+			return;
 		}
 		
 		if (!manager.getLoadedProcesses().containsKey(modelName)) {
@@ -473,7 +478,7 @@ public class OllamaService {
 			return;
 		}
 		
-		boolean isStream = false;
+		boolean isStream = true;
 		try {
 			if (ollamaReq.has("stream") && ollamaReq.get("stream").isJsonPrimitive()) {
 				isStream = ollamaReq.get("stream").getAsBoolean();
@@ -506,37 +511,40 @@ public class OllamaService {
 		
 		String createdAt = formatOllamaTime(Instant.now());
 		String requestBody = JsonUtil.toJson(openAiReq);
-		
-		HttpURLConnection connection = null;
-		try {
-			String targetUrl = String.format("http://localhost:%d/v1/chat/completions", port.intValue());
-			URL url = URI.create(targetUrl).toURL();
-			connection = (HttpURLConnection) url.openConnection();
-			connection.setRequestMethod("POST");
-			connection.setConnectTimeout(36000 * 1000);
-			connection.setReadTimeout(36000 * 1000);
-			connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-			connection.setDoOutput(true);
-			byte[] input = requestBody.getBytes(StandardCharsets.UTF_8);
-			connection.setRequestProperty("Content-Length", String.valueOf(input.length));
-			try (OutputStream os = connection.getOutputStream()) {
-				os.write(input, 0, input.length);
+
+		boolean finalIsStream = isStream;
+		this.worker.execute(() -> {
+			HttpURLConnection connection = null;
+			try {
+				String targetUrl = String.format("http://localhost:%d/v1/chat/completions", port.intValue());
+				URL url = URI.create(targetUrl).toURL();
+				connection = (HttpURLConnection) url.openConnection();
+				connection.setRequestMethod("POST");
+				connection.setConnectTimeout(36000 * 1000);
+				connection.setReadTimeout(36000 * 1000);
+				connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+				connection.setDoOutput(true);
+				byte[] input = requestBody.getBytes(StandardCharsets.UTF_8);
+				connection.setRequestProperty("Content-Length", String.valueOf(input.length));
+				try (OutputStream os = connection.getOutputStream()) {
+					os.write(input, 0, input.length);
+				}
+
+				int responseCode = connection.getResponseCode();
+				if (finalIsStream) {
+					handleOllamaChatStreamResponse(ctx, connection, responseCode, modelName, createdAt);
+				} else {
+					handleOllamaChatNonStreamResponse(ctx, connection, responseCode, modelName, createdAt);
+				}
+			} catch (Exception e) {
+				logger.info("处理Ollama chat请求时发生错误", e);
+				sendOllamaError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+			} finally {
+				if (connection != null) {
+					connection.disconnect();
+				}
 			}
-			
-			int responseCode = connection.getResponseCode();
-			if (isStream) {
-				handleOllamaChatStreamResponse(ctx, connection, responseCode, modelName, createdAt);
-			} else {
-				handleOllamaChatNonStreamResponse(ctx, connection, responseCode, modelName, createdAt);
-			}
-		} catch (Exception e) {
-			logger.info("处理Ollama chat请求时发生错误", e);
-			sendOllamaError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
-		} finally {
-			if (connection != null) {
-				connection.disconnect();
-			}
-		}
+		});
 	}
 	
 	private static void applyOllamaOptionsToOpenAI(JsonObject openAiReq, JsonElement optionsEl) {
@@ -697,9 +705,35 @@ public class OllamaService {
 		} catch (Exception ignore) {
 		}
 		String content = null;
+		String thinking = null;
 		String doneReason = "stop";
 		JsonElement toolCalls = null;
+		
+		long totalDuration = 0L;
+		long loadDuration = 0L;
+		long promptEvalCount = 0L;
+		long promptEvalDuration = 0L;
+		long evalCount = 0L;
+		long evalDuration = 0L;
+		
 		if (parsed != null) {
+			JsonObject timings = parsed.has("timings") && parsed.get("timings").isJsonObject() ? parsed.getAsJsonObject("timings") : null;
+			if (timings != null) {
+				int promptN = JsonUtil.getJsonInt(timings, "prompt_n", 0).intValue();
+				int cacheN = JsonUtil.getJsonInt(timings, "cache_n", 0).intValue();
+				int predictedN = JsonUtil.getJsonInt(timings, "predicted_n", 0).intValue();
+				
+				promptEvalCount = (long) promptN + (long) cacheN;
+				evalCount = (long) predictedN;
+				
+				Double promptMs = safeDouble(timings, "prompt_ms");
+				Double predictedMs = safeDouble(timings, "predicted_ms");
+				
+				promptEvalDuration = msToNs(promptMs);
+				evalDuration = msToNs(predictedMs);
+				loadDuration = 0L;
+				totalDuration = promptEvalDuration + evalDuration;
+			}
 			try {
 				JsonArray choices = parsed.getAsJsonArray("choices");
 				if (choices != null && choices.size() > 0 && choices.get(0).isJsonObject()) {
@@ -707,6 +741,9 @@ public class OllamaService {
 					JsonObject msg = c0.has("message") && c0.get("message").isJsonObject() ? c0.getAsJsonObject("message") : null;
 					if (msg != null && msg.has("content")) {
 						content = JsonUtil.jsonValueToString(msg.get("content"));
+					}
+					if (msg != null && msg.has("reasoning_content")) {
+						thinking = JsonUtil.jsonValueToString(msg.get("reasoning_content"));
 					}
 					if (msg != null) {
 						toolCalls = extractToolCallsFromOpenAIMessage(msg, new HashMap<>(), true);
@@ -730,6 +767,9 @@ public class OllamaService {
 		Map<String, Object> message = new HashMap<>();
 		message.put("role", "assistant");
 		message.put("content", content);
+		if (thinking != null && !thinking.isBlank()) {
+			message.put("thinking", thinking);
+		}
 		if (toolCalls != null && !toolCalls.isJsonNull()) {
 			JsonElement ollamaToolCalls = toOllamaToolCalls(toolCalls);
 			if (ollamaToolCalls != null && !ollamaToolCalls.isJsonNull()) {
@@ -740,6 +780,12 @@ public class OllamaService {
 		
 		out.put("done", Boolean.TRUE);
 		out.put("done_reason", doneReason);
+		out.put("total_duration", Long.valueOf(totalDuration));
+		out.put("load_duration", Long.valueOf(loadDuration));
+		out.put("prompt_eval_count", Long.valueOf(promptEvalCount));
+		out.put("prompt_eval_duration", Long.valueOf(promptEvalDuration));
+		out.put("eval_count", Long.valueOf(evalCount));
+		out.put("eval_duration", Long.valueOf(evalDuration));
 		
 		sendOllamaJson(ctx, HttpResponseStatus.OK, out);
 	}
@@ -765,6 +811,7 @@ public class OllamaService {
 		Map<Integer, String> toolCallIndexToId = new HashMap<>();
 		String functionCallId = null;
 		String functionCallName = null;
+		JsonObject timings = null;
 		
 		try (BufferedReader br = new BufferedReader(
 			new InputStreamReader(
@@ -785,15 +832,21 @@ public class OllamaService {
 				}
 				String data = line.substring(6);
 				if ("[DONE]".equals(data)) {
-					writeOllamaStreamChunk(ctx, modelName, createdAt, "", true, doneReason);
+					Map<String, Object> timingFields = buildOllamaTimingFields(timings);
+					writeOllamaStreamChunk(ctx, modelName, createdAt, "", null, true, doneReason, timingFields);
 					break;
 				}
 				JsonObject chunk = tryParseObject(data);
 				if (chunk == null) {
 					continue;
 				}
+				JsonObject extractedTimings = chunk.has("timings") && chunk.get("timings").isJsonObject() ? chunk.getAsJsonObject("timings") : null;
+				if (extractedTimings != null) {
+					timings = extractedTimings;
+				}
 				
 				String deltaContent = null;
+				String deltaThinking = null;
 				String finish = null;
 				JsonElement deltaToolCalls = null;
 				
@@ -804,6 +857,9 @@ public class OllamaService {
 						JsonObject delta = c0.has("delta") && c0.get("delta").isJsonObject() ? c0.getAsJsonObject("delta") : null;
 						if (delta != null && delta.has("content")) {
 							deltaContent = JsonUtil.jsonValueToString(delta.get("content"));
+						}
+						if (delta != null && delta.has("reasoning_content")) {
+							deltaThinking = JsonUtil.jsonValueToString(delta.get("reasoning_content"));
 						}
 						if (delta != null) {
 							deltaToolCalls = extractToolCallsFromOpenAIMessage(delta, toolCallIndexToId, false);
@@ -838,9 +894,11 @@ public class OllamaService {
 					doneReason = finish;
 				}
 				boolean hasContent = deltaContent != null && !deltaContent.isEmpty();
+				boolean hasThinking = deltaThinking != null && !deltaThinking.isEmpty();
 				boolean hasToolCalls = deltaToolCalls != null && !deltaToolCalls.isJsonNull();
-				if (hasContent || hasToolCalls) {
-					writeOllamaStreamChunk(ctx, modelName, createdAt, hasContent ? deltaContent : "", deltaToolCalls, false, null);
+				if (hasContent || hasThinking || hasToolCalls) {
+					JsonElement ollamaToolCalls = hasToolCalls ? toOllamaToolCalls(deltaToolCalls) : null;
+					writeOllamaStreamChunk(ctx, modelName, createdAt, hasContent ? deltaContent : "", hasThinking ? deltaThinking : null, ollamaToolCalls, false, null, null);
 				}
 			}
 		} catch (Exception e) {
@@ -858,10 +916,18 @@ public class OllamaService {
 	}
 	
 	private static void writeOllamaStreamChunk(ChannelHandlerContext ctx, String modelName, String createdAt, String content, boolean done, String doneReason) {
-		writeOllamaStreamChunk(ctx, modelName, createdAt, content, null, done, doneReason);
+		writeOllamaStreamChunk(ctx, modelName, createdAt, content, null, null, done, doneReason, null);
 	}
 	
 	private static void writeOllamaStreamChunk(ChannelHandlerContext ctx, String modelName, String createdAt, String content, JsonElement toolCalls, boolean done, String doneReason) {
+		writeOllamaStreamChunk(ctx, modelName, createdAt, content, null, toolCalls, done, doneReason, null);
+	}
+
+	private static void writeOllamaStreamChunk(ChannelHandlerContext ctx, String modelName, String createdAt, String content, JsonElement toolCalls, boolean done, String doneReason, Map<String, Object> doneFields) {
+		writeOllamaStreamChunk(ctx, modelName, createdAt, content, null, toolCalls, done, doneReason, doneFields);
+	}
+	
+	private static void writeOllamaStreamChunk(ChannelHandlerContext ctx, String modelName, String createdAt, String content, String thinking, JsonElement toolCalls, boolean done, String doneReason, Map<String, Object> doneFields) {
 		Map<String, Object> out = new HashMap<>();
 		out.put("model", modelName);
 		out.put("created_at", createdAt);
@@ -869,6 +935,9 @@ public class OllamaService {
 		Map<String, Object> message = new HashMap<>();
 		message.put("role", "assistant");
 		message.put("content", content == null ? "" : content);
+		if (thinking != null && !thinking.isBlank()) {
+			message.put("thinking", thinking);
+		}
 		if (toolCalls != null && !toolCalls.isJsonNull()) {
 			message.put("tool_calls", toolCalls);
 		}
@@ -877,6 +946,9 @@ public class OllamaService {
 		out.put("done", Boolean.valueOf(done));
 		if (done) {
 			out.put("done_reason", doneReason == null || doneReason.isBlank() ? "stop" : doneReason);
+			if (doneFields != null && !doneFields.isEmpty()) {
+				out.putAll(doneFields);
+			}
 		}
 		
 		String json = JsonUtil.toJson(out) + "\n";
@@ -889,6 +961,39 @@ public class OllamaService {
 				ctx.close();
 			}
 		});
+	}
+	
+	/**
+	 * 	TODO 这里还要修改
+	 * @param timings
+	 * @return
+	 */
+	private static Map<String, Object> buildOllamaTimingFields(JsonObject timings) {
+		Map<String, Object> out = new HashMap<>();
+		long promptEvalCount = 0L;
+		long evalCount = 0L;
+		long promptEvalDuration = 0L;
+		long evalDuration = 0L;
+		if (timings != null) {
+			int promptN = JsonUtil.getJsonInt(timings, "prompt_n", 0).intValue();
+			int cacheN = JsonUtil.getJsonInt(timings, "cache_n", 0).intValue();
+			int predictedN = JsonUtil.getJsonInt(timings, "predicted_n", 0).intValue();
+
+			promptEvalCount = (long) promptN + (long) cacheN;
+			evalCount = (long) predictedN;
+
+			promptEvalDuration = msToNs(safeDouble(timings, "prompt_ms"));
+			evalDuration = msToNs(safeDouble(timings, "predicted_ms"));
+		}
+
+		out.put("done", true);
+		out.put("total_duration", Long.valueOf(promptEvalDuration + evalDuration));
+		out.put("load_duration", Long.valueOf(0L));
+		out.put("prompt_eval_count", Long.valueOf(promptEvalCount));
+		out.put("prompt_eval_duration", Long.valueOf(promptEvalDuration));
+		out.put("eval_count", Long.valueOf(evalCount));
+		out.put("eval_duration", Long.valueOf(evalDuration));
+		return out;
 	}
 	
 	private static JsonObject tryParseObject(String s) {
@@ -1019,6 +1124,39 @@ public class OllamaService {
 		} catch (Exception e) {
 			return null;
 		}
+	}
+	
+	private static Double safeDouble(JsonObject obj, String key) {
+		if (obj == null || key == null || key.isBlank() || !obj.has(key) || obj.get(key) == null || obj.get(key).isJsonNull()) {
+			return null;
+		}
+		try {
+			JsonElement el = obj.get(key);
+			if (el.isJsonPrimitive() && el.getAsJsonPrimitive().isNumber()) {
+				return el.getAsDouble();
+			}
+			if (el.isJsonPrimitive() && el.getAsJsonPrimitive().isString()) {
+				String s = el.getAsString();
+				if (s == null || s.isBlank()) {
+					return null;
+				}
+				return Double.parseDouble(s.trim());
+			}
+			return null;
+		} catch (Exception e) {
+			return null;
+		}
+	}
+	
+	private static long msToNs(Double ms) {
+		if (ms == null) {
+			return 0L;
+		}
+		double v = ms.doubleValue();
+		if (!Double.isFinite(v) || v <= 0d) {
+			return 0L;
+		}
+		return Math.max(0L, Math.round(v * 1_000_000d));
 	}
 	
 	private static boolean ensureToolCallIdsInArray(JsonArray arr, Map<Integer, String> indexToId) {
