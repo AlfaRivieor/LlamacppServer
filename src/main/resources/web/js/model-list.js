@@ -153,6 +153,7 @@ function renderModelsList(models) {
     models.forEach(model => {
         const metadata = model.metadata || {};
         const architecture = metadata.architecture || '未知';
+        const quantization = metadata.quantization || '';
         const isLoading = !!model.isLoading;
 
         let status = model.status;
@@ -216,6 +217,7 @@ function renderModelsList(models) {
                             </div>
                             <div class="model-meta">
                                 <span><i class="fas fa-layer-group"></i> ${architecture}</span>
+                                ${quantization ? `<span><i class="fas fa-microchip"></i> ${quantization}</span>` : ''}
                                 <span><i class="fas fa-hdd"></i> ${formatFileSize(model.size)}</span>
                                 ${model.port ? `<span><i class="fas fa-network-wired"></i> ${model.port}</span>` : ''}
                             </div>

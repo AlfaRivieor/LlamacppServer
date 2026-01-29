@@ -12,7 +12,7 @@ public class GGUFModel {
 	private String name;
 
 	/**
-	 * 忘了是啥
+	 * 架构名
 	 */
 	private String architecture;
 
@@ -32,7 +32,7 @@ public class GGUFModel {
 	private GGUFMetaData primaryModel;
 
 	/**
-	 * 	
+	 * 	视觉模块
 	 */
 	private GGUFMetaData mmproj;
 
@@ -53,12 +53,8 @@ public class GGUFModel {
 	
 	
 	/**
-	 * 	
+	 * 	是否为偏好模型
 	 */
-	
-	
-	
-	
 	private boolean favourite = false;
 	
 	
@@ -120,6 +116,16 @@ public class GGUFModel {
 	
 	public GGUFMetaData getPrimaryModel() {
 		return this.primaryModel;
+	}
+	
+	public Integer getFileType() {
+		if (this.primaryModel == null) return null;
+		return this.primaryModel.getFileType();
+	}
+	
+	public String getQuantizationType() {
+		if (this.primaryModel == null) return null;
+		return this.primaryModel.getQuantizationType();
 	}
 
 	public void setMmproj(GGUFMetaData mmproj) {

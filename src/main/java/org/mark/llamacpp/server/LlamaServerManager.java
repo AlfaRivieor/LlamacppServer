@@ -327,17 +327,21 @@ public class LlamaServerManager {
 			File primaryFile = bundle.getPrimaryFile();
 			if(primaryFile != null && primaryFile.exists()) {
 				GGUFMetaData md = GGUFMetaData.readFile(primaryFile);
-				model.setPrimaryModel(md);
-				// 将主模型元数据也添加到列表中，保持兼容性
-				model.addMetaData(md);
+				if (md != null) {
+					model.setPrimaryModel(md);
+					// 将主模型元数据也添加到列表中，保持兼容性
+					model.addMetaData(md);
+				}
 			}
 			
 			// 处理mmproj文件
 			File mmprojFile = bundle.getMmprojFile();
 			if(mmprojFile != null && mmprojFile.exists()) {
 				GGUFMetaData md = GGUFMetaData.readFile(mmprojFile);
-				model.setMmproj(md);
-				model.addMetaData(md);
+				if (md != null) {
+					model.setMmproj(md);
+					model.addMetaData(md);
+				}
 			}
 			
 			// 优化：不再读取所有分卷文件的元数据

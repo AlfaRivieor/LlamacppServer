@@ -232,6 +232,7 @@ public class ModelActionController implements BaseController {
 					metadata.put("contextLength", primaryModel.getIntValue(architecture + ".context_length"));
 					metadata.put("embeddingLength", primaryModel.getIntValue(architecture + ".embedding_length"));
 					metadata.put("fileType", primaryModel.getIntValue("general.file_type"));
+					metadata.put("quantization", primaryModel.getQuantizationType());
 				}
 				modelInfo.put("metadata", metadata);
 

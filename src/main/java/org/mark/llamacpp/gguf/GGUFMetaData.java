@@ -15,16 +15,34 @@ import java.nio.charset.StandardCharsets;
  */
 public class GGUFMetaData {
 
+	/**
+	 * 	文件名
+	 */
     private final String fileName;
+    
+    /**
+     * 	文件路径
+     */
     private final String filePath;
+    
+    /**
+     * 	架构
+     */
     private final String architecture;
+    
+    /**
+     * 	上下文长度
+     */
     private final Integer contextLength;
+    
+    private final Integer fileType;
 
-    private GGUFMetaData(String fileName, String filePath, String architecture, Integer contextLength) {
+    private GGUFMetaData(String fileName, String filePath, String architecture, Integer contextLength, Integer fileType) {
         this.fileName = fileName;
         this.filePath = filePath;
         this.architecture = architecture;
         this.contextLength = contextLength;
+        this.fileType = fileType;
     }
 
     public static GGUFMetaData readFile(File file) {
@@ -34,6 +52,7 @@ public class GGUFMetaData {
 
         String architecture = null;
         Integer contextLength = null;
+        Integer fileType = null;
 
         // 使用 BufferedInputStream 提高读取性能
         try (FileInputStream fis = new FileInputStream(file);
@@ -65,6 +84,12 @@ public class GGUFMetaData {
                     Object value = readValue(dis, valueType);
                     architecture = value instanceof String ? (String) value : null;
                     handled = true;
+                } else if ("general.file_type".equals(key)) {
+                    Object value = readValue(dis, valueType);
+                    if (value instanceof Number) {
+                        fileType = ((Number) value).intValue();
+                    }
+                    handled = true;
                 } else if (key.endsWith(".context_length")) {
                     // 简单的策略：读取任何以 .context_length 结尾的键
                     Object value = readValue(dis, valueType);
@@ -85,7 +110,7 @@ public class GGUFMetaData {
             return null;
         }
 
-        return new GGUFMetaData(file.getName(), file.getAbsolutePath(), architecture, contextLength);
+        return new GGUFMetaData(file.getName(), file.getAbsolutePath(), architecture, contextLength, fileType);
     }
 
     public String getFileName() {
@@ -102,6 +127,15 @@ public class GGUFMetaData {
 
     public Integer getContextLength() {
         return contextLength;
+    }
+    
+    public Integer getFileType() {
+    	return fileType;
+    }
+    
+    public String getQuantizationType() {
+    	if (fileType == null) return null;
+    	return fileTypeToQuantizationName(fileType.intValue());
     }
 
     /**
@@ -121,7 +155,32 @@ public class GGUFMetaData {
         if (key != null && key.endsWith(".context_length")) {
             return contextLength;
         }
+        if ("general.file_type".equals(key)) {
+        	return fileType;
+        }
         return null;
+    }
+    
+    private static String fileTypeToQuantizationName(int fileType) {
+    	return switch (fileType) {
+    	case 0 -> "F32";
+    	case 1 -> "F16";
+    	case 2 -> "Q4_0";
+    	case 3 -> "Q4_1";
+    	case 7 -> "Q8_0";
+    	case 8 -> "Q5_0";
+    	case 9 -> "Q5_1";
+    	case 10 -> "Q2_K";
+    	case 11 -> "Q3_K_S";
+    	case 12 -> "Q3_K_M";
+    	case 13 -> "Q3_K_L";
+    	case 14 -> "Q4_K_S";
+    	case 15 -> "Q4_K_M";
+    	case 16 -> "Q5_K_S";
+    	case 17 -> "Q5_K_M";
+    	case 18 -> "Q6_K";
+    	default -> "UNKNOWN(" + fileType + ")";
+    	};
     }
 
     // --- 内部辅助方法和枚举 ---
