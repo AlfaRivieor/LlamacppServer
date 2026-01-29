@@ -1,9 +1,7 @@
 package org.mark.llamacpp.lmstudio;
 
+import org.mark.llamacpp.lmstudio.channel.LMStudioRouterHandler;
 import org.mark.llamacpp.lmstudio.websocket.LMStudioWebSocketHandler;
-import org.mark.llamacpp.server.channel.BasicRouterHandler;
-import org.mark.llamacpp.server.channel.CompletionRouterHandler;
-import org.mark.llamacpp.server.channel.FileDownloadRouterHandler;
 import org.mark.llamacpp.server.channel.OpenAIRouterHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,9 +69,7 @@ public class LMStudio {
 	                                    .addLast(new ChunkedWriteHandler())
 	                                    .addLast(new LMStudioWsPathSelectHandler())
 	                                    
-	                                    .addLast(new BasicRouterHandler())
-	                                    .addLast(new CompletionRouterHandler())
-	                                    .addLast(new FileDownloadRouterHandler())
+	                                    .addLast(new LMStudioRouterHandler())
 	                                    .addLast(new OpenAIRouterHandler());
 	                        }
 	                        @Override

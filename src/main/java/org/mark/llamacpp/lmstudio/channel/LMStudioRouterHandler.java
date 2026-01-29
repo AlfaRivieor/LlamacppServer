@@ -1,46 +1,99 @@
 package org.mark.llamacpp.lmstudio.channel;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-import org.mark.llamacpp.gguf.GGUFMetaData;
-import org.mark.llamacpp.gguf.GGUFModel;
-import org.mark.llamacpp.server.LlamaCppProcess;
+import org.mark.llamacpp.lmstudio.service.LMStudioService;
 import org.mark.llamacpp.server.LlamaServer;
-import org.mark.llamacpp.server.LlamaServerManager;
-import org.mark.llamacpp.server.controller.BaseController;
 import org.mark.llamacpp.server.exception.RequestMethodException;
 import org.mark.llamacpp.server.struct.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.util.ReferenceCountUtil;
 
 
 
 /**
  * 	模拟LM Studio的API服务。
  */
-public class LMStudioRouterHandler implements BaseController {
+public class LMStudioRouterHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
 	private static final Logger logger = LoggerFactory.getLogger(LMStudioRouterHandler.class);
-
+	
+	private static final ExecutorService async = Executors.newVirtualThreadPerTaskExecutor();
+	
+	private LMStudioService lmStudioService = new LMStudioService();
+	
+	
+	
 	@Override
-	public boolean handleRequest(String uri, ChannelHandlerContext ctx, FullHttpRequest request)
+	protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
+		FullHttpRequest retained = request.retainedDuplicate();
+		async.execute(() -> {
+			try {
+				this.handleRequest(ctx, retained);
+			} finally {
+				ReferenceCountUtil.release(retained);
+			}
+		});
+	}
+	
+	
+	public LMStudioRouterHandler() {
+		
+	}
+	
+	/**
+	 * 	
+	 * @param ctx
+	 * @param request
+	 */
+	private void handleRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
+		if (!request.decoderResult().isSuccess()) {
+			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.BAD_REQUEST, "请求解析失败");
+			return;
+		}
+		String uri = request.uri();
+		logger.info("收到请求: {} {}", request.method().name(), uri);
+		logger.info("请求头：{}", request.headers());
+		// 傻逼浏览器不知道为什么一直在他妈的访问/.well-known/appspecific/com.chrome.devtools.json
+		if ("/.well-known/appspecific/com.chrome.devtools.json".equals(uri)) {
+			ctx.close();
+			return;
+		}
+		//
+		try {
+			this.handleRequest(uri, ctx, request);
+		} catch (RequestMethodException e) {
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error(e.getMessage()));
+		}
+	}
+	
+	/**
+	 * 	正经处理请求的地方。
+	 * @param uri
+	 * @param ctx
+	 * @param request
+	 * @return
+	 * @throws RequestMethodException
+	 */
+	private boolean handleRequest(String uri, ChannelHandlerContext ctx, FullHttpRequest request)
 			throws RequestMethodException {
 		// 模型列表
 		if (uri.startsWith("/api/v0/models")) {
-			this.handleModelList(uri, ctx, request);
+			//this.handleModelList(uri, ctx, request);
+			this.lmStudioService.handleModelList(ctx, request);
 			return true;
 		}
 		
 		// 聊天补全
 		if (uri.startsWith("/api/v0/chat/completions")) {
+			this.lmStudioService.handleOpenAIChatCompletionsRequest(ctx, request);
 			
 			return true;
 		}
@@ -57,104 +110,17 @@ public class LMStudioRouterHandler implements BaseController {
 		return false;
 	}
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	private void handleModelList(String uri, ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
-		this.assertRequestMethod(request.method() != HttpMethod.GET, "只支持GET请求");
-
-		try {
-			LlamaServerManager manager = LlamaServerManager.getInstance();
-			Map<String, LlamaCppProcess> loadedProcesses = manager.getLoadedProcesses();
-			List<GGUFModel> allModels = manager.listModel();
-			List<Map<String, Object>> data = new ArrayList<>();
-
-			for (Map.Entry<String, LlamaCppProcess> entry : loadedProcesses.entrySet()) {
-				String modelId = entry.getKey();
-				GGUFModel modelInfo = findModelInfo(allModels, modelId);
-				Map<String, Object> modelData = new HashMap<>();
-				modelData.put("id", modelId);
-				modelData.put("object", "model");
-
-				String modelType = "llm";
-				String architecture = null;
-				Integer contextLength = null;
-				String quantization = null;
-
-				if (modelInfo != null) {
-					GGUFMetaData primaryModel = modelInfo.getPrimaryModel();
-					if (primaryModel != null) {
-						architecture = primaryModel.getStringValue("general.architecture");
-						contextLength = primaryModel.getIntValue(architecture + ".context_length");
-						quantization = primaryModel.getQuantizationType();
-					}
-					modelType = this.resolveModelType(architecture, modelInfo.getMmproj() != null);
-				}
-				
-				// 模型类型
-				modelData.put("type", modelType);
-				if (architecture != null) {
-					modelData.put("arch", architecture);
-				}
-				// 这个固定写这玩意
-				modelData.put("publisher", "GGUF");
-				modelData.put("compatibility_type", "gguf");
-				// 量化等级
-				if (quantization != null) {
-					modelData.put("quantization", quantization);
-				}
-				// 状态
-				modelData.put("state", "loaded");
-				if (contextLength != null) {
-					modelData.put("max_context_length", contextLength);
-				}
-				// 能力
-				List<String> capabilities = new ArrayList<>(4);
-				capabilities.add("tool_use");
-				
-				modelData.put("capabilities", capabilities);
-				data.add(modelData);
-			}
-
-			Map<String, Object> response = new HashMap<>();
-			response.put("data", data);
-			response.put("object", "list");
-			LlamaServer.sendJsonResponse(ctx, response);
-		} catch (Exception e) {
-			logger.info("获取模型列表时发生错误", e);
-			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型列表时发生错误: " + e.getMessage()));
-		}
+	@Override
+	public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+		//logger.info("客户端连接关闭：{}", ctx);
+		// 事件通知
+		this.lmStudioService.channelInactive(ctx);
+		super.channelInactive(ctx);
 	}
 
-	private GGUFModel findModelInfo(List<GGUFModel> allModels, String modelId) {
-		if (allModels == null || modelId == null) {
-			return null;
-		}
-		for (GGUFModel model : allModels) {
-			if (modelId.equals(model.getModelId())) {
-				return model;
-			}
-		}
-		return null;
-	}
-
-	private String resolveModelType(String architecture, boolean multimodal) {
-		if (multimodal) {
-			return "vlm";
-		}
-		if (architecture == null || architecture.isEmpty()) {
-			return "llm";
-		}
-		String arch = architecture.toLowerCase(Locale.ROOT);
-		if (arch.contains("embed") || arch.contains("embedding") || arch.contains("bert")) {
-			return "embeddings";
-		}
-		return "llm";
+	@Override
+	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+		logger.info("处理请求时发生异常", cause);
+		ctx.close();
 	}
 }

@@ -4,8 +4,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.Gson;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -21,7 +19,6 @@ import java.util.regex.Pattern;
 import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFModel;
 import org.mark.llamacpp.server.LlamaCppProcess;
-import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.LlamaServerManager;
 
 import org.slf4j.Logger;
@@ -86,7 +83,9 @@ public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSoc
     }
     
     /**
-     * 处理文本帧
+     *  处理文本内容：{"authVersion":1,"clientIdentifier":"omYqsPM7sz9z9qCFOalzpwdK","clientPasskey":"5u4MoF5V7oQpqXuttGNqArVy"}
+     * @param ctx
+     * @param frame
      */
     private void handleTextFrame(ChannelHandlerContext ctx, TextWebSocketFrame frame) {
         String request = frame.text();
@@ -129,7 +128,13 @@ public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSoc
         
         ctx.channel().writeAndFlush(new TextWebSocketFrame("{\"success\": true}"));
     }
-
+    
+    
+    /**
+     * 	获取所有可用模型，处理报文：{"type":"rpcCall","endpoint":"listDownloadedModels","callId":0}
+     * @param ctx
+     * @param callId
+     */
     private void handleListDownloadedModelsRpc(ChannelHandlerContext ctx, int callId) {
         try {
             LlamaServerManager manager = LlamaServerManager.getInstance();
@@ -188,6 +193,12 @@ public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSoc
         }
     }
     
+    
+    /**
+     * 	查询已加载的模型，处理报文：{"type":"rpcCall","endpoint":"listLoaded","callId":0}
+     * @param ctx
+     * @param callId
+     */
     private void handleListLoadedRpc(ChannelHandlerContext ctx, int callId) {
         try {
             LlamaServerManager manager = LlamaServerManager.getInstance();
@@ -219,6 +230,12 @@ public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSoc
         }
     }
     
+    /**
+     * 	获取模型信息，处理报文：{"type":"rpcCall","endpoint":"getModelInfo","callId":1,"parameter":{"specifier":{"type":"instanceReference","instanceReference":"qR88yCcuNjzLeNiUrpm628+Y"},"throwIfNotFound":false}}
+     * @param ctx
+     * @param callId
+     * @param root
+     */
     private void handleGetModelInfoRpc(ChannelHandlerContext ctx, int callId, JsonObject root) {
         String instanceReference = null;
         boolean throwIfNotFound = false;
