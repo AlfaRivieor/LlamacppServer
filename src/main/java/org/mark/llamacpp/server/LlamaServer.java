@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.mark.llamacpp.lmstudio.LMStudio;
+import org.mark.llamacpp.ollama.Ollama;
 import org.mark.llamacpp.server.channel.AnthropicRouterHandler;
 import org.mark.llamacpp.server.channel.BasicRouterHandler;
 import org.mark.llamacpp.server.channel.CompletionRouterHandler;
@@ -119,6 +120,9 @@ public class LlamaServer {
 		// 启动测试用的lmstudo兼容服务。
 		LMStudio lmStudio = new LMStudio();
 		lmStudio.start();
+		
+		Ollama ollama = new Ollama();
+		ollama.start();
 
 		// 尝试创建系统托盘
 		createWindowsSystemTray();
