@@ -180,6 +180,8 @@ public class GGUFMetaData {
     	case 17 -> "Q5_K_M";
     	case 18 -> "Q6_K";
     	case 76 -> "MXFP4";
+    	case 38 -> "MXFP4";
+    	case 32 -> "BF16";
     	default -> "UNKNOWN(" + fileType + ")";
     	};
     }
