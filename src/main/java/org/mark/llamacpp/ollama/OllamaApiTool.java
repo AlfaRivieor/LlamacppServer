@@ -25,6 +25,8 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.mark.llamacpp.gguf.GGUFMetaData;
+import org.mark.llamacpp.gguf.GGUFModel;
 import org.mark.llamacpp.server.tools.JsonUtil;
 
 import com.google.gson.JsonArray;
@@ -853,4 +855,37 @@ public final class OllamaApiTool {
 		long pos = raf.getFilePointer();
 		raf.seek(pos + n);
 	}
+	
+	
+	public static Instant resolveModifiedAt(GGUFModel model) {
+		if (model == null) {
+			return Instant.now();
+		}
+		GGUFMetaData primary = model.getPrimaryModel();
+		if (primary != null) {
+			Instant lm = safeModifiedAt(primary.getFilePath());
+			if (lm != null) {
+				return lm;
+			}
+		}
+		Instant lm = safeModifiedAt(model.getPath());
+		return lm == null ? Instant.now() : lm;
+	}
+	
+	public static Instant safeModifiedAt(String path) {
+		if (path == null || path.isBlank()) {
+			return null;
+		}
+		try {
+			File f = new File(path);
+			if (!f.exists() || !f.isFile()) {
+				return null;
+			}
+			long lm = f.lastModified();
+			return lm > 0 ? Instant.ofEpochMilli(lm) : null;
+		} catch (Exception ignore) {
+			return null;
+		}
+	}
+
 }

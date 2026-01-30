@@ -4,6 +4,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.mark.llamacpp.ollama.OllamaService;
+import org.mark.llamacpp.ollama.OllamaShowService;
+import org.mark.llamacpp.ollama.OllamaTagsService;
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.exception.RequestMethodException;
 import org.mark.llamacpp.server.struct.ApiResponse;
@@ -33,8 +35,20 @@ public class OllamaRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 	
 	private static final ExecutorService async = Executors.newVirtualThreadPerTaskExecutor();
 	
+	/**
+	 * 	
+	 */
 	private OllamaService ollamaService = new OllamaService();
 	
+	/**
+	 * 	
+	 */
+	private OllamaTagsService ollamaTagsService = new OllamaTagsService();
+	
+	/**
+	 * 	
+	 */
+	private OllamaShowService ollamaShowService = new OllamaShowService();
 	
 	
 	@Override
@@ -96,14 +110,14 @@ public class OllamaRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 				return true;
 			}
 		}
-		
+		// 1、第一个，一般用来获取全部可用的模型。
 		if (uri.startsWith("/api/tags")) {
-			this.ollamaService.handleModelList(ctx, request);
+			this.ollamaTagsService.handleModelList(ctx, request);
 			return true;
 		}
-		
+		// 查阅指定模型的详细信息。
 		if (uri.startsWith("/api/show")) {
-			this.ollamaService.handleShow(ctx, request);
+			this.ollamaShowService.handleShow(ctx, request);
 			return true;
 		}
 		

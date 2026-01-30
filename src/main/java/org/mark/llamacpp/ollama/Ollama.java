@@ -1,19 +1,34 @@
 package org.mark.llamacpp.ollama;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.mark.llamacpp.ollama.channel.OllamaRouterHandler;
+import org.mark.llamacpp.server.tools.JsonUtil;
+import org.mark.llamacpp.server.tools.ParamTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
 public class Ollama {
@@ -23,13 +38,14 @@ public class Ollama {
 	private static final Logger logger = LoggerFactory.getLogger(Ollama.class);
 	
 	
+	/**
+	 * 	日志的路径
+	 */
+	private static final Path CACHE_PATH = Paths.get("cache" + File.separator + "ollama");
 	
 	
 	
-	
-	public Ollama() {
-		
-	}
+
 	
 	private Thread worker;
 	
@@ -39,6 +55,9 @@ public class Ollama {
 	private int port = 11435;
 	
 	
+	public Ollama() {
+		
+	}
 	
 	
 	
@@ -86,5 +105,48 @@ public class Ollama {
 	        }
 		});
 		this.worker.start();
+	}
+	
+	/**
+	 * 	发送错误消息。
+	 * @param ctx
+	 * @param status
+	 * @param message
+	 */
+	public static void sendOllamaError(ChannelHandlerContext ctx, HttpResponseStatus status, String message) {
+		Map<String, Object> payload = new HashMap<>();
+		payload.put("error", message == null ? "" : message);
+		sendOllamaJson(ctx, status == null ? HttpResponseStatus.INTERNAL_SERVER_ERROR : status, payload);
+	}
+	
+	/**
+	 * 	发送JSON消息。
+	 * @param ctx
+	 * @param status
+	 * @param data
+	 */
+	public static void sendOllamaJson(ChannelHandlerContext ctx, HttpResponseStatus status, Object data) {
+		String json = JsonUtil.toJson(data);
+		byte[] content = json.getBytes(StandardCharsets.UTF_8);
+		
+		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
+		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
+		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
+		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type");
+		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "*");
+		//
+		response.headers().set(HttpHeaderNames.ETAG, ParamTool.buildEtag(content));
+		response.headers().set("X-Powered-By", "Express");
+		response.headers().set(HttpHeaderNames.CONNECTION, "alive");
+		response.headers().set(HttpHeaderNames.DATE, ParamTool.getDate());
+		response.content().writeBytes(content);
+		
+		ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
+			@Override
+			public void operationComplete(ChannelFuture future) {
+				ctx.close();
+			}
+		});
 	}
 }

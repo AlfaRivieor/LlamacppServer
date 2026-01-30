@@ -13,6 +13,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
+import org.mark.llamacpp.gguf.GGUFMetaData;
+import org.mark.llamacpp.gguf.GGUFModel;
+
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -214,4 +217,34 @@ public class ParamTool {
 		}
 	}
 	
+	public static String readArchitecture(GGUFModel model) {
+		if (model == null) {
+			return null;
+		}
+		GGUFMetaData primary = model.getPrimaryModel();
+		if (primary == null) {
+			return null;
+		}
+		try {
+			return primary.getStringValue("general.architecture");
+		} catch (Exception ignore) {
+			return null;
+		}
+	}
+	
+	
+	public static String readQuantization(GGUFModel model) {
+		if (model == null) {
+			return null;
+		}
+		GGUFMetaData primary = model.getPrimaryModel();
+		if (primary == null) {
+			return null;
+		}
+		try {
+			return primary.getQuantizationType();
+		} catch (Exception ignore) {
+			return null;
+		}
+	}
 }

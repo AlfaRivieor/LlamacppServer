@@ -65,62 +65,6 @@ public class OllamaService {
 	private final ExecutorService worker = Executors.newCachedThreadPool();
 	
 	/**
-	 * 	处理模型列表的请求。
-	 * @param ctx
-	 * @param request
-	 */
-	public void handleModelList(ChannelHandlerContext ctx, FullHttpRequest request) {
-		if (request.method() != HttpMethod.GET) {
-			sendOllamaError(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "Only GET method is supported");
-			return;
-		}
-		
-		LlamaServerManager manager = LlamaServerManager.getInstance();
-		Map<String, LlamaCppProcess> loaded = manager.getLoadedProcesses();
-		manager.listModel();
-		
-		List<Map<String, Object>> models = new ArrayList<>();
-		for (Map.Entry<String, LlamaCppProcess> entry : loaded.entrySet()) {
-			String modelId = entry.getKey();
-			GGUFModel model = manager.findModelById(modelId);
-			
-			Map<String, Object> item = new HashMap<>();
-			item.put("name", modelId);
-			item.put("model", modelId);
-			
-			long size = model == null ? 0L : model.getSize();
-			Instant modifiedAt = resolveModifiedAt(model);
-			String family = readArchitecture(model);
-			String quant = readQuantization(model);
-			
-			item.put("modified_at", OllamaApiTool.formatOllamaTime(modifiedAt));
-			item.put("size", size);
-			item.put("digest", OllamaApiTool.sha256Hex(modelId + ":" + item.get("size") + ":" + item.get("modified_at")));
-			
-			Map<String, Object> details = new HashMap<>();
-			details.put("parent_model", "");
-			details.put("format", "gguf");
-			if (family != null && !family.isBlank()) {
-				details.put("family", family);
-				List<String> families = new ArrayList<>();
-				families.add(family);
-				details.put("families", families);
-			}
-			details.put("parameter_size", OllamaApiTool.guessParameterSize(modelId, size));
-			if (quant != null && !quant.isBlank()) {
-				details.put("quantization_level", quant);
-			}
-			item.put("details", details);
-			
-			models.add(item);
-		}
-		
-		Map<String, Object> resp = new HashMap<>();
-		resp.put("models", models);
-		sendOllamaJson(ctx, HttpResponseStatus.OK, resp);
-	}
-	
-	/**
 	 * 	返回指定模型的详情信息（兼容 /api/show）。
 	 * @param ctx
 	 * @param request
@@ -133,7 +77,7 @@ public class OllamaService {
 
 		String modelName = null;
 		boolean verbose = false;
-
+		
 		if (request.method() == HttpMethod.POST) {
 			String content = request.content().toString(StandardCharsets.UTF_8);
 			logger.debug("收到 Ollama show 请求: {}", content);
