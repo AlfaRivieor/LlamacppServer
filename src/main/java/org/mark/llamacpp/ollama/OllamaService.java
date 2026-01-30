@@ -1,24 +1,15 @@
 package org.mark.llamacpp.ollama;
 
 import java.io.BufferedReader;
-import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.channels.FileChannel;
-import java.security.MessageDigest;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
-import java.time.temporal.ChronoField;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -26,8 +17,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFMetaDataReader;
@@ -55,30 +44,25 @@ import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 
 
 
 /**
- * 	兼容ollama API的服务。
+ * Ollama API 兼容层服务：
+ * - /api/tags（模型列表）
+ * - /api/show（模型详情）
+ * - /api/chat（聊天）
  */
 public class OllamaService {
 	
 	private static final Logger logger = LoggerFactory.getLogger(OllamaService.class);
 	private final ExecutorService worker = Executors.newCachedThreadPool();
-	
-	private static final ZoneId DEFAULT_ZONE = ZoneId.systemDefault();
-	private static final DateTimeFormatter OLLAMA_TIME_FORMATTER = new DateTimeFormatterBuilder()
-			.appendPattern("yyyy-MM-dd'T'HH:mm:ss")
-			.appendFraction(ChronoField.NANO_OF_SECOND, 0, 6, true)
-			.appendOffset("+HH:MM", "+00:00")
-			.toFormatter();
-	private static final Pattern PARAM_SIZE_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)([bBmMkK])");
 	
 	/**
 	 * 	处理模型列表的请求。
@@ -93,61 +77,25 @@ public class OllamaService {
 		
 		LlamaServerManager manager = LlamaServerManager.getInstance();
 		Map<String, LlamaCppProcess> loaded = manager.getLoadedProcesses();
-		List<GGUFModel> allModels = manager.listModel();
+		manager.listModel();
 		
 		List<Map<String, Object>> models = new ArrayList<>();
 		for (Map.Entry<String, LlamaCppProcess> entry : loaded.entrySet()) {
 			String modelId = entry.getKey();
-			GGUFModel model = findModelInfo(allModels, modelId);
+			GGUFModel model = manager.findModelById(modelId);
 			
 			Map<String, Object> item = new HashMap<>();
 			item.put("name", modelId);
 			item.put("model", modelId);
 			
-			Instant modifiedAt = Instant.now();
-			Long size = 0L;
-			String family = null;
-			String quant = null;
+			long size = model == null ? 0L : model.getSize();
+			Instant modifiedAt = resolveModifiedAt(model);
+			String family = readArchitecture(model);
+			String quant = readQuantization(model);
 			
-			if (model != null) {
-				size = model.getSize();
-				GGUFMetaData primary = model.getPrimaryModel();
-				if (primary != null) {
-					try {
-						family = primary.getStringValue("general.architecture");
-					} catch (Exception ignore) {
-					}
-					try {
-						quant = primary.getQuantizationType();
-					} catch (Exception ignore) {
-					}
-					try {
-						String filePath = primary.getFilePath();
-						if (filePath != null) {
-							long lm = new File(filePath).lastModified();
-							if (lm > 0) {
-								modifiedAt = Instant.ofEpochMilli(lm);
-							}
-						}
-					} catch (Exception ignore) {
-					}
-				} else {
-					try {
-						String p = model.getPath();
-						if (p != null) {
-							long lm = new File(p).lastModified();
-							if (lm > 0) {
-								modifiedAt = Instant.ofEpochMilli(lm);
-							}
-						}
-					} catch (Exception ignore) {
-					}
-				}
-			}
-			
-			item.put("modified_at", formatOllamaTime(modifiedAt));
-			item.put("size", size == null ? 0L : size.longValue());
-			item.put("digest", sha256Hex(modelId + ":" + item.get("size") + ":" + item.get("modified_at")));
+			item.put("modified_at", OllamaApiTool.formatOllamaTime(modifiedAt));
+			item.put("size", size);
+			item.put("digest", OllamaApiTool.sha256Hex(modelId + ":" + item.get("size") + ":" + item.get("modified_at")));
 			
 			Map<String, Object> details = new HashMap<>();
 			details.put("parent_model", "");
@@ -158,7 +106,7 @@ public class OllamaService {
 				families.add(family);
 				details.put("families", families);
 			}
-			details.put("parameter_size", guessParameterSize(modelId, size == null ? 0L : size.longValue()));
+			details.put("parameter_size", OllamaApiTool.guessParameterSize(modelId, size));
 			if (quant != null && !quant.isBlank()) {
 				details.put("quantization_level", quant);
 			}
@@ -171,59 +119,9 @@ public class OllamaService {
 		resp.put("models", models);
 		sendOllamaJson(ctx, HttpResponseStatus.OK, resp);
 	}
-
-	private static String formatOllamaTime(Instant instant) {
-		Instant safe = instant == null ? Instant.now() : instant;
-		return OLLAMA_TIME_FORMATTER.format(OffsetDateTime.ofInstant(safe, DEFAULT_ZONE));
-	}
-
-	private static String guessParameterSize(String modelId, long sizeBytes) {
-		String source = modelId == null ? "" : modelId.trim();
-		if (source.contains(":")) {
-			String[] parts = source.split(":", 2);
-			if (parts.length == 2 && parts[1] != null && !parts[1].isBlank()) {
-				source = parts[1].trim();
-			}
-		}
-
-		Matcher m = PARAM_SIZE_PATTERN.matcher(source);
-		if (m.find()) {
-			try {
-				double value = Double.parseDouble(m.group(1));
-				String unit = m.group(2);
-				if (unit != null && !unit.isBlank()) {
-					char u = Character.toUpperCase(unit.charAt(0));
-					double params;
-					if (u == 'B') {
-						params = value * 1_000_000_000d;
-					} else if (u == 'M') {
-						params = value * 1_000_000d;
-					} else if (u == 'K') {
-						params = value * 1_000d;
-					} else {
-						params = 0d;
-					}
-
-					if (params >= 1_000_000_000d) {
-						return String.format(java.util.Locale.ROOT, "%.2fB", params / 1_000_000_000d);
-					}
-					if (params >= 1_000_000d) {
-						return String.format(java.util.Locale.ROOT, "%.2fM", params / 1_000_000d);
-					}
-					if (params >= 1_000d) {
-						return String.format(java.util.Locale.ROOT, "%.2fK", params / 1_000d);
-					}
-				}
-			} catch (Exception ignore) {
-			}
-		}
-
-		double mBytes = sizeBytes <= 0 ? 0d : (sizeBytes / 1024d / 1024d);
-		return String.format(java.util.Locale.ROOT, "%.2fM", mBytes);
-	}
 	
 	/**
-	 * 	
+	 * 	返回指定模型的详情信息（兼容 /api/show）。
 	 * @param ctx
 	 * @param request
 	 */
@@ -238,9 +136,8 @@ public class OllamaService {
 
 		if (request.method() == HttpMethod.POST) {
 			String content = request.content().toString(StandardCharsets.UTF_8);
-			
-			System.err.println("收到请求：" + content);
-			
+			logger.debug("收到 Ollama show 请求: {}", content);
+
 			if (content == null || content.trim().isEmpty()) {
 				sendOllamaError(ctx, HttpResponseStatus.BAD_REQUEST, "Request body is empty");
 				return;
@@ -316,17 +213,12 @@ public class OllamaService {
 		Map<String, Object> modelInfo = new HashMap<>();
 		Instant modifiedAt = Instant.now();
 		if (primary != null) {
-			File primaryFile = new File(primary.getFilePath());
-			if (primaryFile.exists() && primaryFile.isFile()) {
-				try {
-					long lm = primaryFile.lastModified();
-					if (lm > 0) {
-						modifiedAt = Instant.ofEpochMilli(lm);
-					}
-				} catch (Exception ignore) {
-				}
+			Instant lm = safeModifiedAt(primary.getFilePath());
+			if (lm != null) {
+				modifiedAt = lm;
 			}
 
+			File primaryFile = new File(primary.getFilePath());
 			Map<String, Object> m = GGUFMetaDataReader.read(primaryFile);
 			if (m != null) {
 				if (!verbose) {
@@ -388,7 +280,7 @@ public class OllamaService {
 			families.add(family);
 			details.put("families", families);
 		}
-		details.put("parameter_size", guessParameterSize(modelId, model.getSize()));
+		details.put("parameter_size", OllamaApiTool.guessParameterSize(modelId, model.getSize()));
 		if (quant != null && !quant.isBlank()) {
 			details.put("quantization_level", quant);
 		}
@@ -396,7 +288,7 @@ public class OllamaService {
 		List<Map<String, Object>> tensors = new ArrayList<>();
 		if (primary != null) {
 			try {
-				tensors = readGgufTensors(new File(primary.getFilePath()));
+				tensors = OllamaApiTool.readGgufTensors(new File(primary.getFilePath()));
 			} catch (Exception ignore) {
 			}
 		}
@@ -419,7 +311,7 @@ public class OllamaService {
 		caps.add("completion");
 		caps.add("tools");
 		out.put("capabilities", caps);
-		out.put("modified_at", formatOllamaTime(modifiedAt));
+		out.put("modified_at", OllamaApiTool.formatOllamaTime(modifiedAt));
 
 		sendOllamaJson(ctx, HttpResponseStatus.OK, out);
 	}
@@ -437,6 +329,7 @@ public class OllamaService {
 		}
 		
 		String content = request.content().toString(StandardCharsets.UTF_8);
+		logger.info("收到 Ollama chat 请求: {}", content);
 		if (content == null || content.trim().isEmpty()) {
 			sendOllamaError(ctx, HttpResponseStatus.BAD_REQUEST, "Request body is empty");
 			return;
@@ -457,12 +350,6 @@ public class OllamaService {
 		LlamaServerManager manager = LlamaServerManager.getInstance();
 		final String modelName = JsonUtil.getJsonString(ollamaReq, "model", null);
 		if (modelName == null || modelName.isBlank()) {
-//			if (manager.getLoadedProcesses().size() == 1) {
-//				modelName = manager.getFirstModelName();
-//			} else {
-//				sendOllamaError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing required parameter: model");
-//				return;
-//			}
 			sendOllamaError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing required parameter: model");
 			return;
 		}
@@ -504,12 +391,11 @@ public class OllamaService {
 		
 		JsonObject openAiReq = new JsonObject();
 		openAiReq.addProperty("model", modelName);
-		openAiReq.add("messages", normalizeOllamaMessagesForOpenAI(messages.getAsJsonArray()));
+		openAiReq.add("messages", OllamaApiTool.normalizeOllamaMessagesForOpenAI(messages.getAsJsonArray()));
 		openAiReq.addProperty("stream", isStream);
-		applyOllamaOptionsToOpenAI(openAiReq, ollamaReq.get("options"));
-		applyOllamaToolsToOpenAI(openAiReq, ollamaReq);
-		
-		String createdAt = formatOllamaTime(Instant.now());
+		OllamaApiTool.applyOllamaOptionsToOpenAI(openAiReq, ollamaReq.get("options"));
+		OllamaApiTool.applyOllamaToolsToOpenAI(openAiReq, ollamaReq);
+
 		String requestBody = JsonUtil.toJson(openAiReq);
 
 		boolean finalIsStream = isStream;
@@ -532,9 +418,9 @@ public class OllamaService {
 
 				int responseCode = connection.getResponseCode();
 				if (finalIsStream) {
-					handleOllamaChatStreamResponse(ctx, connection, responseCode, modelName, createdAt);
+					handleOllamaChatStreamResponse(ctx, connection, responseCode, modelName);
 				} else {
-					handleOllamaChatNonStreamResponse(ctx, connection, responseCode, modelName, createdAt);
+					handleOllamaChatNonStreamResponse(ctx, connection, responseCode, modelName);
 				}
 			} catch (Exception e) {
 				logger.info("处理Ollama chat请求时发生错误", e);
@@ -547,154 +433,10 @@ public class OllamaService {
 		});
 	}
 	
-	private static void applyOllamaOptionsToOpenAI(JsonObject openAiReq, JsonElement optionsEl) {
-		if (openAiReq == null || optionsEl == null || optionsEl.isJsonNull() || !optionsEl.isJsonObject()) {
-			return;
-		}
-		JsonObject options = optionsEl.getAsJsonObject();
-		
-		copyNumber(options, "temperature", openAiReq, "temperature");
-		copyNumber(options, "top_p", openAiReq, "top_p");
-		copyNumber(options, "top_k", openAiReq, "top_k");
-		copyNumber(options, "repeat_penalty", openAiReq, "repeat_penalty");
-		copyNumber(options, "frequency_penalty", openAiReq, "frequency_penalty");
-		copyNumber(options, "presence_penalty", openAiReq, "presence_penalty");
-		copyNumber(options, "seed", openAiReq, "seed");
-		
-		Integer numPredict = null;
-		try {
-			if (options.has("num_predict") && options.get("num_predict").isJsonPrimitive()) {
-				numPredict = options.get("num_predict").getAsInt();
-			}
-		} catch (Exception ignore) {
-		}
-		if (numPredict != null) {
-			openAiReq.addProperty("max_tokens", numPredict.intValue());
-		}
-		
-		JsonElement stop = options.get("stop");
-		if (stop != null && !stop.isJsonNull()) {
-			if (stop.isJsonArray()) {
-				openAiReq.add("stop", stop.deepCopy());
-			} else if (stop.isJsonPrimitive()) {
-				openAiReq.add("stop", stop.deepCopy());
-			}
-		}
-	}
-	
-	private static JsonArray normalizeOllamaMessagesForOpenAI(JsonArray messages) {
-		if (messages == null) {
-			return new JsonArray();
-		}
-		JsonArray out = new JsonArray();
-		Map<Integer, String> toolCallIndexToId = new HashMap<>();
-		for (int i = 0; i < messages.size(); i++) {
-			JsonElement el = messages.get(i);
-			if (el == null || el.isJsonNull() || !el.isJsonObject()) {
-				continue;
-			}
-			JsonObject msg = el.getAsJsonObject().deepCopy();
-			normalizeOneMessageForOpenAI(msg, toolCallIndexToId);
-			out.add(msg);
-		}
-		return out;
-	}
-	
-	private static void normalizeOneMessageForOpenAI(JsonObject msg, Map<Integer, String> toolCallIndexToId) {
-		if (msg == null) {
-			return;
-		}
-		
-		JsonElement contentEl = msg.get("content");
-		if (contentEl != null && !contentEl.isJsonNull() && !contentEl.isJsonPrimitive()) {
-			msg.addProperty("content", JsonUtil.jsonValueToString(contentEl));
-		}
-		
-		JsonElement toolCallsEl = msg.get("tool_calls");
-		if (toolCallsEl != null && !toolCallsEl.isJsonNull() && toolCallsEl.isJsonArray()) {
-			JsonArray toolCalls = toolCallsEl.getAsJsonArray();
-			normalizeToolCallsForOpenAI(toolCalls, toolCallIndexToId);
-		}
-		
-		JsonObject fc = (msg.has("function_call") && msg.get("function_call").isJsonObject()) ? msg.getAsJsonObject("function_call") : null;
-		if (fc != null && (toolCallsEl == null || toolCallsEl.isJsonNull())) {
-			JsonArray arr = toolCallsFromFunctionCall(fc, null);
-			if (arr != null) {
-				msg.add("tool_calls", arr);
-			}
-			msg.remove("function_call");
-		}
-		
-		String role = JsonUtil.getJsonString(msg, "role", null);
-		if (role != null && role.equals("tool")) {
-			JsonElement toolContent = msg.get("content");
-			if (toolContent != null && !toolContent.isJsonNull() && !toolContent.isJsonPrimitive()) {
-				msg.addProperty("content", JsonUtil.jsonValueToString(toolContent));
-			}
-		}
-	}
-	
-	private static void normalizeToolCallsForOpenAI(JsonArray toolCalls, Map<Integer, String> toolCallIndexToId) {
-		if (toolCalls == null) {
-			return;
-		}
-		for (int i = 0; i < toolCalls.size(); i++) {
-			JsonElement el = toolCalls.get(i);
-			if (el == null || el.isJsonNull() || !el.isJsonObject()) {
-				continue;
-			}
-			JsonObject tc = el.getAsJsonObject();
-			
-			JsonObject fn = (tc.has("function") && tc.get("function").isJsonObject()) ? tc.getAsJsonObject("function") : null;
-			if (fn != null) {
-				String type = JsonUtil.getJsonString(tc, "type", null);
-				if (type == null || type.isBlank()) {
-					tc.addProperty("type", "function");
-				}
-				JsonElement argsEl = fn.get("arguments");
-				if (argsEl != null && !argsEl.isJsonNull() && !argsEl.isJsonPrimitive()) {
-					fn.addProperty("arguments", argsEl.toString());
-				} else if (argsEl != null && !argsEl.isJsonNull() && argsEl.isJsonPrimitive() && !argsEl.getAsJsonPrimitive().isString()) {
-					fn.addProperty("arguments", JsonUtil.jsonValueToString(argsEl));
-				} else if (argsEl == null || argsEl.isJsonNull()) {
-					fn.addProperty("arguments", "");
-				}
-			}
-		}
-		ensureToolCallIdsInArray(toolCalls, toolCallIndexToId);
-	}
-
-	private static void applyOllamaToolsToOpenAI(JsonObject openAiReq, JsonObject ollamaReq) {
-		if (openAiReq == null || ollamaReq == null) {
-			return;
-		}
-		JsonElement tools = ollamaReq.get("tools");
-		if (tools != null && !tools.isJsonNull() && tools.isJsonArray()) {
-			openAiReq.add("tools", tools.deepCopy());
-		}
-		JsonElement toolChoice = ollamaReq.get("tool_choice");
-		if (toolChoice != null && !toolChoice.isJsonNull()) {
-			openAiReq.add("tool_choice", toolChoice.deepCopy());
-		}
-	}
-	
-	private static void copyNumber(JsonObject src, String srcKey, JsonObject dst, String dstKey) {
-		if (src == null || dst == null || srcKey == null || dstKey == null || !src.has(srcKey)) {
-			return;
-		}
-		try {
-			if (!src.get(srcKey).isJsonPrimitive() || !src.get(srcKey).getAsJsonPrimitive().isNumber()) {
-				return;
-			}
-			dst.add(srcKey.equals(dstKey) ? dstKey : dstKey, src.get(srcKey).deepCopy());
-		} catch (Exception ignore) {
-		}
-	}
-	
-	private static void handleOllamaChatNonStreamResponse(ChannelHandlerContext ctx, HttpURLConnection connection, int responseCode, String modelName, String createdAt) throws IOException {
-		String responseBody = readBody(connection, responseCode >= 200 && responseCode < 300);
+	private static void handleOllamaChatNonStreamResponse(ChannelHandlerContext ctx, HttpURLConnection connection, int responseCode, String modelName) throws IOException {
+		String responseBody = OllamaApiTool.readBody(connection, responseCode >= 200 && responseCode < 300);
 		if (!(responseCode >= 200 && responseCode < 300)) {
-			String msg = extractOpenAIErrorMessage(responseBody);
+			String msg = OllamaApiTool.extractOpenAIErrorMessage(responseBody);
 			sendOllamaError(ctx, HttpResponseStatus.valueOf(responseCode), msg == null ? responseBody : msg);
 			return;
 		}
@@ -719,20 +461,13 @@ public class OllamaService {
 		if (parsed != null) {
 			JsonObject timings = parsed.has("timings") && parsed.get("timings").isJsonObject() ? parsed.getAsJsonObject("timings") : null;
 			if (timings != null) {
-				int promptN = JsonUtil.getJsonInt(timings, "prompt_n", 0).intValue();
-				int cacheN = JsonUtil.getJsonInt(timings, "cache_n", 0).intValue();
-				int predictedN = JsonUtil.getJsonInt(timings, "predicted_n", 0).intValue();
-				
-				promptEvalCount = (long) promptN + (long) cacheN;
-				evalCount = (long) predictedN;
-				
-				Double promptMs = safeDouble(timings, "prompt_ms");
-				Double predictedMs = safeDouble(timings, "predicted_ms");
-				
-				promptEvalDuration = msToNs(promptMs);
-				evalDuration = msToNs(predictedMs);
-				loadDuration = 0L;
-				totalDuration = promptEvalDuration + evalDuration;
+				Map<String, Object> timingFields = OllamaApiTool.buildOllamaTimingFields(timings);
+				totalDuration = readLong(timingFields, "total_duration");
+				loadDuration = readLong(timingFields, "load_duration");
+				promptEvalCount = readLong(timingFields, "prompt_eval_count");
+				promptEvalDuration = readLong(timingFields, "prompt_eval_duration");
+				evalCount = readLong(timingFields, "eval_count");
+				evalDuration = readLong(timingFields, "eval_duration");
 			}
 			try {
 				JsonArray choices = parsed.getAsJsonArray("choices");
@@ -746,7 +481,7 @@ public class OllamaService {
 						thinking = JsonUtil.jsonValueToString(msg.get("reasoning_content"));
 					}
 					if (msg != null) {
-						toolCalls = extractToolCallsFromOpenAIMessage(msg, new HashMap<>(), true);
+						toolCalls = OllamaApiTool.extractToolCallsFromOpenAIMessage(msg, new HashMap<>(), true);
 					}
 					JsonElement fr = c0.get("finish_reason");
 					if (fr != null && !fr.isJsonNull()) {
@@ -762,7 +497,7 @@ public class OllamaService {
 		
 		Map<String, Object> out = new HashMap<>();
 		out.put("model", modelName);
-		out.put("created_at", createdAt);
+		out.put("created_at", OllamaApiTool.formatOllamaTime(Instant.now()));
 		
 		Map<String, Object> message = new HashMap<>();
 		message.put("role", "assistant");
@@ -771,7 +506,7 @@ public class OllamaService {
 			message.put("thinking", thinking);
 		}
 		if (toolCalls != null && !toolCalls.isJsonNull()) {
-			JsonElement ollamaToolCalls = toOllamaToolCalls(toolCalls);
+			JsonElement ollamaToolCalls = OllamaApiTool.toOllamaToolCalls(toolCalls);
 			if (ollamaToolCalls != null && !ollamaToolCalls.isJsonNull()) {
 				message.put("tool_calls", ollamaToolCalls);
 			}
@@ -790,20 +525,22 @@ public class OllamaService {
 		sendOllamaJson(ctx, HttpResponseStatus.OK, out);
 	}
 	
-	private static void handleOllamaChatStreamResponse(ChannelHandlerContext ctx, HttpURLConnection connection, int responseCode, String modelName, String createdAt) throws IOException {
+	private static void handleOllamaChatStreamResponse(ChannelHandlerContext ctx, HttpURLConnection connection, int responseCode, String modelName) throws IOException {
 		if (!(responseCode >= 200 && responseCode < 300)) {
-			String responseBody = readBody(connection, false);
-			String msg = extractOpenAIErrorMessage(responseBody);
+			String responseBody = OllamaApiTool.readBody(connection, false);
+			String msg = OllamaApiTool.extractOpenAIErrorMessage(responseBody);
 			sendOllamaError(ctx, HttpResponseStatus.valueOf(responseCode), msg == null ? responseBody : msg);
 			return;
 		}
 		
 		HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(responseCode));
 		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/x-ndjson; charset=UTF-8");
-		response.headers().set(HttpHeaderNames.CACHE_CONTROL, "no-cache");
-		response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
+		response.headers().set(HttpHeaderNames.DATE, ParamTool.getDate());
+		HttpUtil.setTransferEncodingChunked(response, true);
+		//response.headers().set(HttpHeaderNames.CACHE_CONTROL, "no-cache");
+		//response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+		//response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+		//response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
 		ctx.write(response);
 		ctx.flush();
 		
@@ -832,11 +569,11 @@ public class OllamaService {
 				}
 				String data = line.substring(6);
 				if ("[DONE]".equals(data)) {
-					Map<String, Object> timingFields = buildOllamaTimingFields(timings);
-					writeOllamaStreamChunk(ctx, modelName, createdAt, "", null, true, doneReason, timingFields);
+					Map<String, Object> timingFields = OllamaApiTool.buildOllamaTimingFields(timings);
+					writeOllamaStreamChunk(ctx, modelName, "", null, true, doneReason, timingFields);
 					break;
 				}
-				JsonObject chunk = tryParseObject(data);
+				JsonObject chunk = ParamTool.tryParseObject(data);
 				if (chunk == null) {
 					continue;
 				}
@@ -862,7 +599,7 @@ public class OllamaService {
 							deltaThinking = JsonUtil.jsonValueToString(delta.get("reasoning_content"));
 						}
 						if (delta != null) {
-							deltaToolCalls = extractToolCallsFromOpenAIMessage(delta, toolCallIndexToId, false);
+							deltaToolCalls = OllamaApiTool.extractToolCallsFromOpenAIMessage(delta, toolCallIndexToId, false);
 							if (deltaToolCalls == null) {
 								JsonObject fc = (delta.has("function_call") && delta.get("function_call").isJsonObject()) ? delta.getAsJsonObject("function_call") : null;
 								if (fc != null) {
@@ -878,7 +615,7 @@ public class OllamaService {
 											&& functionCallName != null && !functionCallName.isBlank()) {
 										enriched.addProperty("name", functionCallName);
 									}
-									deltaToolCalls = toolCallsFromFunctionCall(enriched, functionCallId);
+									deltaToolCalls = OllamaApiTool.toolCallsFromFunctionCall(enriched, functionCallId);
 								}
 							}
 						}
@@ -897,8 +634,8 @@ public class OllamaService {
 				boolean hasThinking = deltaThinking != null && !deltaThinking.isEmpty();
 				boolean hasToolCalls = deltaToolCalls != null && !deltaToolCalls.isJsonNull();
 				if (hasContent || hasThinking || hasToolCalls) {
-					JsonElement ollamaToolCalls = hasToolCalls ? toOllamaToolCalls(deltaToolCalls) : null;
-					writeOllamaStreamChunk(ctx, modelName, createdAt, hasContent ? deltaContent : "", hasThinking ? deltaThinking : null, ollamaToolCalls, false, null, null);
+					JsonElement ollamaToolCalls = hasToolCalls ? OllamaApiTool.toOllamaToolCalls(deltaToolCalls) : null;
+					writeOllamaStreamChunk(ctx, modelName, hasContent ? deltaContent : "", hasThinking ? deltaThinking : null, ollamaToolCalls, false, null, null);
 				}
 			}
 		} catch (Exception e) {
@@ -914,23 +651,15 @@ public class OllamaService {
 			}
 		});
 	}
-	
-	private static void writeOllamaStreamChunk(ChannelHandlerContext ctx, String modelName, String createdAt, String content, boolean done, String doneReason) {
-		writeOllamaStreamChunk(ctx, modelName, createdAt, content, null, null, done, doneReason, null);
-	}
-	
-	private static void writeOllamaStreamChunk(ChannelHandlerContext ctx, String modelName, String createdAt, String content, JsonElement toolCalls, boolean done, String doneReason) {
-		writeOllamaStreamChunk(ctx, modelName, createdAt, content, null, toolCalls, done, doneReason, null);
-	}
 
-	private static void writeOllamaStreamChunk(ChannelHandlerContext ctx, String modelName, String createdAt, String content, JsonElement toolCalls, boolean done, String doneReason, Map<String, Object> doneFields) {
-		writeOllamaStreamChunk(ctx, modelName, createdAt, content, null, toolCalls, done, doneReason, doneFields);
+	private static void writeOllamaStreamChunk(ChannelHandlerContext ctx, String modelName, String content, JsonElement toolCalls, boolean done, String doneReason, Map<String, Object> doneFields) {
+		writeOllamaStreamChunk(ctx, modelName, content, null, toolCalls, done, doneReason, doneFields);
 	}
 	
-	private static void writeOllamaStreamChunk(ChannelHandlerContext ctx, String modelName, String createdAt, String content, String thinking, JsonElement toolCalls, boolean done, String doneReason, Map<String, Object> doneFields) {
+	private static void writeOllamaStreamChunk(ChannelHandlerContext ctx, String modelName, String content, String thinking, JsonElement toolCalls, boolean done, String doneReason, Map<String, Object> doneFields) {
 		Map<String, Object> out = new HashMap<>();
 		out.put("model", modelName);
-		out.put("created_at", createdAt);
+		out.put("created_at", OllamaApiTool.formatOllamaTime(Instant.now()));
 		
 		Map<String, Object> message = new HashMap<>();
 		message.put("role", "assistant");
@@ -963,434 +692,10 @@ public class OllamaService {
 		});
 	}
 	
-	/**
-	 * 	TODO 这里还要修改
-	 * @param timings
-	 * @return
-	 */
-	private static Map<String, Object> buildOllamaTimingFields(JsonObject timings) {
-		Map<String, Object> out = new HashMap<>();
-		long promptEvalCount = 0L;
-		long evalCount = 0L;
-		long promptEvalDuration = 0L;
-		long evalDuration = 0L;
-		if (timings != null) {
-			int promptN = JsonUtil.getJsonInt(timings, "prompt_n", 0).intValue();
-			int cacheN = JsonUtil.getJsonInt(timings, "cache_n", 0).intValue();
-			int predictedN = JsonUtil.getJsonInt(timings, "predicted_n", 0).intValue();
-
-			promptEvalCount = (long) promptN + (long) cacheN;
-			evalCount = (long) predictedN;
-
-			promptEvalDuration = msToNs(safeDouble(timings, "prompt_ms"));
-			evalDuration = msToNs(safeDouble(timings, "predicted_ms"));
-		}
-
-		out.put("done", true);
-		out.put("total_duration", Long.valueOf(promptEvalDuration + evalDuration));
-		out.put("load_duration", Long.valueOf(0L));
-		out.put("prompt_eval_count", Long.valueOf(promptEvalCount));
-		out.put("prompt_eval_duration", Long.valueOf(promptEvalDuration));
-		out.put("eval_count", Long.valueOf(evalCount));
-		out.put("eval_duration", Long.valueOf(evalDuration));
-		return out;
-	}
-	
-	private static JsonObject tryParseObject(String s) {
-		try {
-			if (s == null || s.trim().isEmpty()) {
-				return null;
-			}
-			JsonElement el = JsonUtil.fromJson(s, JsonElement.class);
-			return el != null && el.isJsonObject() ? el.getAsJsonObject() : null;
-		} catch (Exception e) {
-			return null;
-		}
-	}
-	
-	private static JsonElement extractToolCallsFromOpenAIMessage(JsonObject msg, Map<Integer, String> indexToId, boolean includeLegacyFunctionCall) {
-		if (msg == null) {
-			return null;
-		}
-		JsonElement tcs = msg.get("tool_calls");
-		if (tcs != null && !tcs.isJsonNull() && tcs.isJsonArray()) {
-			JsonArray copy = tcs.getAsJsonArray().deepCopy();
-			ensureToolCallIdsInArray(copy, indexToId);
-			return copy;
-		}
-		if (includeLegacyFunctionCall) {
-			JsonObject fc = (msg.has("function_call") && msg.get("function_call").isJsonObject()) ? msg.getAsJsonObject("function_call") : null;
-			if (fc != null) {
-				return toolCallsFromFunctionCall(fc, null);
-			}
-		}
-		return null;
-	}
-	
-	private static JsonArray toolCallsFromFunctionCall(JsonObject functionCall, String id) {
-		if (functionCall == null) {
-			return null;
-		}
-		String name = JsonUtil.getJsonString(functionCall, "name", null);
-		if (name == null || name.isBlank()) {
-			return null;
-		}
-		if (id == null || id.isBlank()) {
-			id = "call_" + UUID.randomUUID().toString().replace("-", "");
-		}
-		JsonElement argsEl = functionCall.get("arguments");
-		String args = argsEl == null || argsEl.isJsonNull() ? "" : JsonUtil.jsonValueToString(argsEl);
-		
-		JsonObject fn = new JsonObject();
-		fn.addProperty("name", name);
-		fn.addProperty("arguments", args);
-		
-		JsonObject tc = new JsonObject();
-		tc.addProperty("id", id);
-		tc.addProperty("type", "function");
-		tc.add("function", fn);
-		
-		JsonArray arr = new JsonArray();
-		arr.add(tc);
-		return arr;
-	}
-	
-	private static JsonElement toOllamaToolCalls(JsonElement openAiToolCalls) {
-		if (openAiToolCalls == null || openAiToolCalls.isJsonNull()) {
-			return null;
-		}
-		if (openAiToolCalls.isJsonArray()) {
-			JsonArray arr = openAiToolCalls.getAsJsonArray();
-			if (arr.size() == 0) {
-				return null;
-			}
-			JsonArray out = new JsonArray();
-			for (int i = 0; i < arr.size(); i++) {
-				JsonElement el = arr.get(i);
-				if (el == null || el.isJsonNull() || !el.isJsonObject()) {
-					continue;
-				}
-				JsonObject tc = el.getAsJsonObject();
-				JsonObject fn = (tc.has("function") && tc.get("function").isJsonObject()) ? tc.getAsJsonObject("function") : null;
-				if (fn == null) {
-					continue;
-				}
-				String name = JsonUtil.getJsonString(fn, "name", null);
-				if (name == null || name.isBlank()) {
-					continue;
-				}
-				JsonElement argsEl = fn.get("arguments");
-				JsonElement args = null;
-				if (argsEl == null || argsEl.isJsonNull()) {
-					args = new JsonObject();
-				} else if (argsEl.isJsonPrimitive() && argsEl.getAsJsonPrimitive().isString()) {
-					args = tryParseJson(argsEl.getAsString());
-					if (args == null) {
-						String s = argsEl.getAsString();
-						args = (s == null || s.isBlank()) ? new JsonObject() : argsEl.deepCopy();
-					}
-				} else if (argsEl.isJsonObject() || argsEl.isJsonArray()) {
-					args = argsEl.deepCopy();
-				} else {
-					args = argsEl.deepCopy();
-				}
-				
-				JsonObject outFn = new JsonObject();
-				outFn.addProperty("name", name);
-				outFn.add("arguments", args == null ? new JsonObject() : args);
-				
-				JsonObject outTc = new JsonObject();
-				outTc.add("function", outFn);
-				out.add(outTc);
-			}
-			return out.size() == 0 ? null : out;
-		}
-		if (openAiToolCalls.isJsonObject()) {
-			JsonObject obj = openAiToolCalls.getAsJsonObject();
-			if (obj.has("function_call") && obj.get("function_call").isJsonObject()) {
-				JsonArray arr = toolCallsFromFunctionCall(obj.getAsJsonObject("function_call"), null);
-				return arr == null ? null : toOllamaToolCalls(arr);
-			}
-		}
-		return null;
-	}
-	
-	private static JsonElement tryParseJson(String s) {
-		try {
-			if (s == null || s.isBlank()) {
-				return null;
-			}
-			return JsonUtil.fromJson(s, JsonElement.class);
-		} catch (Exception e) {
-			return null;
-		}
-	}
-	
-	private static Double safeDouble(JsonObject obj, String key) {
-		if (obj == null || key == null || key.isBlank() || !obj.has(key) || obj.get(key) == null || obj.get(key).isJsonNull()) {
-			return null;
-		}
-		try {
-			JsonElement el = obj.get(key);
-			if (el.isJsonPrimitive() && el.getAsJsonPrimitive().isNumber()) {
-				return el.getAsDouble();
-			}
-			if (el.isJsonPrimitive() && el.getAsJsonPrimitive().isString()) {
-				String s = el.getAsString();
-				if (s == null || s.isBlank()) {
-					return null;
-				}
-				return Double.parseDouble(s.trim());
-			}
-			return null;
-		} catch (Exception e) {
-			return null;
-		}
-	}
-	
-	private static long msToNs(Double ms) {
-		if (ms == null) {
-			return 0L;
-		}
-		double v = ms.doubleValue();
-		if (!Double.isFinite(v) || v <= 0d) {
-			return 0L;
-		}
-		return Math.max(0L, Math.round(v * 1_000_000d));
-	}
-	
-	private static boolean ensureToolCallIdsInArray(JsonArray arr, Map<Integer, String> indexToId) {
-		if (arr == null) {
-			return false;
-		}
-		boolean changed = false;
-		for (int i = 0; i < arr.size(); i++) {
-			JsonElement el = arr.get(i);
-			if (el == null || !el.isJsonObject()) {
-				continue;
-			}
-			JsonObject tc = el.getAsJsonObject();
-			Integer idx = readToolCallIndex(tc, i);
-			String existingId = JsonUtil.getJsonString(tc, "id", null);
-			if (existingId == null || existingId.isBlank()) {
-				String assigned = (indexToId == null || idx == null) ? null : indexToId.get(idx);
-				if (assigned == null || assigned.isBlank()) {
-					assigned = "call_" + UUID.randomUUID().toString().replace("-", "");
-					if (indexToId != null && idx != null) {
-						indexToId.put(idx, assigned);
-					}
-				}
-				tc.addProperty("id", assigned);
-				changed = true;
-			} else if (indexToId != null && idx != null) {
-				indexToId.putIfAbsent(idx, existingId);
-			}
-		}
-		return changed;
-	}
-	
-	private static Integer readToolCallIndex(JsonObject tc, int fallback) {
-		if (tc == null) {
-			return fallback;
-		}
-		JsonElement idxEl = tc.get("index");
-		if (idxEl == null || idxEl.isJsonNull()) {
-			return fallback;
-		}
-		try {
-			if (idxEl.isJsonPrimitive() && idxEl.getAsJsonPrimitive().isNumber()) {
-				return idxEl.getAsInt();
-			}
-			if (idxEl.isJsonPrimitive() && idxEl.getAsJsonPrimitive().isString()) {
-				String s = idxEl.getAsString();
-				if (s != null && !s.isBlank()) {
-					return Integer.parseInt(s.trim());
-				}
-			}
-		} catch (Exception ignore) {
-		}
-		return fallback;
-	}
-	
-	private static String extractOpenAIErrorMessage(String responseBody) {
-		if (responseBody == null || responseBody.isBlank()) {
-			return null;
-		}
-		try {
-			JsonObject parsed = JsonUtil.fromJson(responseBody, JsonObject.class);
-			if (parsed == null) {
-				return null;
-			}
-			JsonObject err = parsed.has("error") && parsed.get("error").isJsonObject() ? parsed.getAsJsonObject("error") : null;
-			if (err == null) {
-				return null;
-			}
-			String msg = JsonUtil.getJsonString(err, "message", null);
-			return msg == null || msg.isBlank() ? null : msg.trim();
-		} catch (Exception e) {
-			return null;
-		}
-	}
-	
-	private static String readBody(HttpURLConnection connection, boolean successStream) throws IOException {
-		if (connection == null) {
-			return "";
-		}
-		try (BufferedReader br = new BufferedReader(
-			new InputStreamReader(successStream ? connection.getInputStream() : connection.getErrorStream(), StandardCharsets.UTF_8)
-		)) {
-			StringBuilder sb = new StringBuilder();
-			String line;
-			while ((line = br.readLine()) != null) {
-				sb.append(line);
-			}
-			return sb.toString();
-		}
-	}
-	
 	private static void sendOllamaError(ChannelHandlerContext ctx, HttpResponseStatus status, String message) {
 		Map<String, Object> payload = new HashMap<>();
 		payload.put("error", message == null ? "" : message);
 		sendOllamaJson(ctx, status == null ? HttpResponseStatus.INTERNAL_SERVER_ERROR : status, payload);
-	}
-	
-	private static List<Map<String, Object>> readGgufTensors(File ggufFile) throws IOException {
-		if (ggufFile == null || !ggufFile.exists() || !ggufFile.isFile()) {
-			return new ArrayList<>();
-		}
-		try (RandomAccessFile raf = new RandomAccessFile(ggufFile, "r"); FileChannel ignore = raf.getChannel()) {
-			byte[] magicBytes = new byte[4];
-			raf.readFully(magicBytes);
-			String magic = new String(magicBytes, StandardCharsets.US_ASCII);
-			if (!"GGUF".equals(magic)) {
-				return new ArrayList<>();
-			}
-
-			readI32Le(raf);
-			long tensorCount = readU64Le(raf);
-			long kvCount = readU64Le(raf);
-
-			for (long i = 0; i < kvCount; i++) {
-				readGgufString(raf);
-				int type = readI32Le(raf);
-				skipGgufValue(raf, type);
-			}
-
-			List<Map<String, Object>> tensors = new ArrayList<>((int) Math.min(Math.max(tensorCount, 0), 4096));
-			for (long i = 0; i < tensorCount; i++) {
-				String name = readGgufString(raf);
-				int nDims = readI32Le(raf);
-				List<Long> shape = new ArrayList<>(Math.max(nDims, 0));
-				for (int d = 0; d < nDims; d++) {
-					shape.add(Long.valueOf(readU64Le(raf)));
-				}
-				int tensorType = readI32Le(raf);
-				readU64Le(raf);
-
-				Map<String, Object> item = new HashMap<>();
-				item.put("name", name);
-				item.put("type", ggmlTypeName(tensorType));
-				item.put("shape", shape);
-				tensors.add(item);
-			}
-
-			return tensors;
-		} catch (EOFException eof) {
-			return new ArrayList<>();
-		} catch (Exception e) {
-			return new ArrayList<>();
-		}
-	}
-
-	private static String ggmlTypeName(int id) {
-		return switch (id) {
-		case 0 -> "F32";
-		case 1 -> "F16";
-		case 2 -> "Q4_0";
-		case 3 -> "Q4_1";
-		case 4 -> "Q4_2";
-		case 5 -> "Q4_3";
-		case 6 -> "Q5_0";
-		case 7 -> "Q5_1";
-		case 8 -> "Q8_0";
-		case 9 -> "Q8_1";
-		case 10 -> "Q2_K";
-		case 11 -> "Q3_K";
-		case 12 -> "Q4_K";
-		case 13 -> "Q5_K";
-		case 14 -> "Q6_K";
-		case 15 -> "Q8_K";
-		case 16 -> "IQ2_XXS";
-		case 17 -> "IQ2_XS";
-		case 18 -> "IQ3_XXS";
-		case 19 -> "IQ1_S";
-		case 20 -> "IQ4_NL";
-		case 21 -> "IQ3_S";
-		case 22 -> "IQ2_S";
-		case 23 -> "IQ4_XS";
-		case 24 -> "I8";
-		case 25 -> "I16";
-		case 26 -> "I32";
-		case 27 -> "I64";
-		case 28 -> "F64";
-		case 29 -> "IQ1_M";
-		case 30 -> "BF16";
-		default -> "UNKNOWN(" + id + ")";
-		};
-	}
-
-	private static int readI32Le(RandomAccessFile raf) throws IOException {
-		return Integer.reverseBytes(raf.readInt());
-	}
-
-	private static long readU64Le(RandomAccessFile raf) throws IOException {
-		return Long.reverseBytes(raf.readLong());
-	}
-
-	private static String readGgufString(RandomAccessFile raf) throws IOException {
-		long len = readU64Le(raf);
-		if (len <= 0) {
-			return "";
-		}
-		if (len > Integer.MAX_VALUE) {
-			skipFully(raf, len);
-			return "";
-		}
-		byte[] bytes = new byte[(int) len];
-		raf.readFully(bytes);
-		return new String(bytes, StandardCharsets.UTF_8);
-	}
-
-	private static void skipGgufValue(RandomAccessFile raf, int type) throws IOException {
-		switch (type) {
-		case 0, 1, 7 -> skipFully(raf, 1);
-		case 2, 3 -> skipFully(raf, 2);
-		case 4, 5, 6 -> skipFully(raf, 4);
-		case 8 -> {
-			long len = readU64Le(raf);
-			if (len > 0) {
-				skipFully(raf, len);
-			}
-		}
-		case 9 -> {
-			int elemType = readI32Le(raf);
-			long len = readU64Le(raf);
-			for (long i = 0; i < len; i++) {
-				skipGgufValue(raf, elemType);
-			}
-		}
-		case 10, 11, 12 -> skipFully(raf, 8);
-		default -> {
-		}
-		}
-	}
-
-	private static void skipFully(RandomAccessFile raf, long n) throws IOException {
-		if (n <= 0) {
-			return;
-		}
-		long pos = raf.getFilePointer();
-		raf.seek(pos + n);
 	}
 
 	/**
@@ -1423,31 +728,83 @@ public class OllamaService {
 			}
 		});
 	}
-	
-	private static GGUFModel findModelInfo(List<GGUFModel> allModels, String modelId) {
-		if (allModels == null || modelId == null) {
+
+	private static long readLong(Map<String, Object> map, String key) {
+		if (map == null || key == null || key.isBlank()) {
+			return 0L;
+		}
+		Object v = map.get(key);
+		if (v == null) {
+			return 0L;
+		}
+		if (v instanceof Number) {
+			return ((Number) v).longValue();
+		}
+		try {
+			return Long.parseLong(String.valueOf(v).trim());
+		} catch (Exception ignore) {
+			return 0L;
+		}
+	}
+
+	private static Instant resolveModifiedAt(GGUFModel model) {
+		if (model == null) {
+			return Instant.now();
+		}
+		GGUFMetaData primary = model.getPrimaryModel();
+		if (primary != null) {
+			Instant lm = safeModifiedAt(primary.getFilePath());
+			if (lm != null) {
+				return lm;
+			}
+		}
+		Instant lm = safeModifiedAt(model.getPath());
+		return lm == null ? Instant.now() : lm;
+	}
+
+	private static Instant safeModifiedAt(String path) {
+		if (path == null || path.isBlank()) {
 			return null;
 		}
-		for (GGUFModel model : allModels) {
-			if (modelId.equals(model.getModelId())) {
-				return model;
-			}
-		}
-		return null;
-	}
-	
-	private static String sha256Hex(String s) {
 		try {
-			MessageDigest md = MessageDigest.getInstance("SHA-256");
-			byte[] digest = md.digest((s == null ? "" : s).getBytes(StandardCharsets.UTF_8));
-			StringBuilder sb = new StringBuilder(digest.length * 2);
-			for (byte b : digest) {
-				sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-				sb.append(Character.forDigit((b & 0xF), 16));
+			File f = new File(path);
+			if (!f.exists() || !f.isFile()) {
+				return null;
 			}
-			return sb.toString();
-		} catch (Exception e) {
-			return UUID.randomUUID().toString().replace("-", "");
+			long lm = f.lastModified();
+			return lm > 0 ? Instant.ofEpochMilli(lm) : null;
+		} catch (Exception ignore) {
+			return null;
+		}
+	}
+
+	private static String readArchitecture(GGUFModel model) {
+		if (model == null) {
+			return null;
+		}
+		GGUFMetaData primary = model.getPrimaryModel();
+		if (primary == null) {
+			return null;
+		}
+		try {
+			return primary.getStringValue("general.architecture");
+		} catch (Exception ignore) {
+			return null;
+		}
+	}
+
+	private static String readQuantization(GGUFModel model) {
+		if (model == null) {
+			return null;
+		}
+		GGUFMetaData primary = model.getPrimaryModel();
+		if (primary == null) {
+			return null;
+		}
+		try {
+			return primary.getQuantizationType();
+		} catch (Exception ignore) {
+			return null;
 		}
 	}
 

@@ -23,7 +23,6 @@ import java.util.concurrent.Executors;
 import org.mark.llamacpp.server.LlamaCppProcess;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.tools.JsonUtil;
-import org.mark.llamacpp.server.LlamaCommandParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -164,11 +163,8 @@ public class OpenAIService {
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 404, null, "Model not found: " + modelName, "model");
 				return;
 			}
-			
-			// 在这加入特殊处理，判断是否存在特殊字符。
-			String body = LlamaCommandParser.filterChatCompletion(ctx, modelName, requestJson);
-			if(body == null)
-				return;
+
+			String body = content;
 			// 获取模型端口
 			Integer modelPort = manager.getModelPort(modelName);
 			if (modelPort == null) {
