@@ -1014,7 +1014,7 @@
         function submitAlias() {
             const modelId = window.__aliasEditingModelId;
             const alias = document.getElementById('aliasInput').value;
-             fetch('/api/model/alias/set', {
+             fetch('/api/models/alias/set', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ modelId, alias })
             }).then(r => r.json()).then(d => {
