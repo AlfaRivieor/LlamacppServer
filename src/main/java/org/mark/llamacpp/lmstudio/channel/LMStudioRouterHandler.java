@@ -60,7 +60,6 @@ public class LMStudioRouterHandler extends SimpleChannelInboundHandler<FullHttpR
 		}
 		String uri = request.uri();
 		logger.info("收到请求: {} {}", request.method().name(), uri);
-		logger.info("请求头：{}", request.headers());
 		// 傻逼浏览器不知道为什么一直在他妈的访问/.well-known/appspecific/com.chrome.devtools.json
 		if ("/.well-known/appspecific/com.chrome.devtools.json".equals(uri)) {
 			ctx.close();

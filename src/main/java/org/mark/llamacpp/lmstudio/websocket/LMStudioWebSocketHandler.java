@@ -22,9 +22,6 @@ import org.mark.llamacpp.server.LlamaCppProcess;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.tools.ParamTool;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.*;
@@ -34,8 +31,6 @@ import io.netty.handler.codec.http.websocketx.*;
  */
 public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
     
-    private static final Logger logger = LoggerFactory.getLogger(LMStudioWebSocketHandler.class);
-    
     // WebSocket管理器
     private final LMStudioWebSocketManager wsManager = LMStudioWebSocketManager.getInstance();
     
@@ -44,8 +39,6 @@ public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSoc
     
     //
     private boolean connected = false;
-    
-    private String requestPath;
     
     // JSON解析器
     private static final Gson gson = new Gson();
@@ -60,10 +53,6 @@ public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSoc
     
     
     public LMStudioWebSocketHandler() {
-    }
-    
-    public LMStudioWebSocketHandler(String uri) {
-        this.requestPath = uri;
     }
     
     @Override
@@ -90,7 +79,7 @@ public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSoc
      */
     private void handleTextFrame(ChannelHandlerContext ctx, TextWebSocketFrame frame) {
         String request = frame.text();
-        logger.info("WebSocket收到消息[{} - {}]: {}", this.connectionId, this.requestPath, request);
+        //logger.info("WebSocket收到消息[{} - {}]: {}", this.connectionId, this.requestPath, request);
         
         try {
             JsonObject obj = gson.fromJson(request, JsonObject.class);
@@ -524,8 +513,7 @@ public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSoc
 
 	@Override
 	public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-		if (evt instanceof io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler.HandshakeComplete hc) {
-			this.requestPath = hc.requestUri();
+		if (evt instanceof WebSocketServerProtocolHandler.HandshakeComplete) {
 			if (!this.connected) {
 				this.connected = true;
 				this.connectionId = this.wsManager.addConnection(ctx);

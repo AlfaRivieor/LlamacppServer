@@ -56,7 +56,7 @@ public class LMStudioWsPathSelectHandler extends ChannelInboundHandlerAdapter {
 
 			String selfName = ctx.name();
 			ctx.pipeline().addAfter(selfName, "lmstudio-ws-protocol", new WebSocketServerProtocolHandler(path, null, true, Integer.MAX_VALUE));
-			ctx.pipeline().addAfter("lmstudio-ws-protocol", "lmstudio-ws-handler", new LMStudioWebSocketHandler(uri));
+			ctx.pipeline().addAfter("lmstudio-ws-protocol", "lmstudio-ws-handler", new LMStudioWebSocketHandler());
 			ctx.fireChannelRead(request.retain());
 			ctx.pipeline().remove(this);
 		} finally {
