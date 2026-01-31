@@ -117,12 +117,22 @@ public class LlamaServer {
 			LlamaServer.bindAnthropic(anthropicPort);
 		});
 		t2.start();
-		// 启动测试用的lmstudo兼容服务。
-		LMStudio lmStudio = LMStudio.getInstance();
-		lmStudio.start();
 		
-		Ollama ollama = Ollama.getInstance();
-		ollama.start();
+		if (lmstudioCompatEnabled) {
+			try {
+				LMStudio.getInstance().start(lmstudioCompatPort);
+			} catch (Exception e) {
+				logger.info("启动LMStudio兼容服务失败: {}", e.getMessage());
+			}
+		}
+		
+		if (ollamaCompatEnabled) {
+			try {
+				Ollama.getInstance().start(ollamaCompatPort);
+			} catch (Exception e) {
+				logger.info("启动Ollama兼容服务失败: {}", e.getMessage());
+			}
+		}
 
 		// 尝试创建系统托盘
 		createWindowsSystemTray();
@@ -204,6 +214,14 @@ public class LlamaServer {
 	private static volatile boolean apiKeyValidationEnabled = false;
 	
 	private static volatile String apiKey = "";
+	
+	private static volatile boolean ollamaCompatEnabled = false;
+	
+	private static volatile int ollamaCompatPort = 11434;
+	
+	private static volatile boolean lmstudioCompatEnabled = false;
+	
+	private static volatile int lmstudioCompatPort = 1234;
 
 	//##############################################################################################################################
 	
@@ -281,6 +299,34 @@ public class LlamaServer {
 				apiKey = security.get("apiKey").getAsString();
 			}
 		}
+		
+		if (root.has("compat")) {
+			JsonObject compat = root.getAsJsonObject("compat");
+			if (compat != null) {
+				if (compat.has("ollama")) {
+					JsonObject ollama = compat.getAsJsonObject("ollama");
+					if (ollama != null) {
+						if (ollama.has("enabled")) {
+							ollamaCompatEnabled = ollama.get("enabled").getAsBoolean();
+						}
+						if (ollama.has("port")) {
+							ollamaCompatPort = ollama.get("port").getAsInt();
+						}
+					}
+				}
+				if (compat.has("lmstudio")) {
+					JsonObject lmstudio = compat.getAsJsonObject("lmstudio");
+					if (lmstudio != null) {
+						if (lmstudio.has("enabled")) {
+							lmstudioCompatEnabled = lmstudio.get("enabled").getAsBoolean();
+						}
+						if (lmstudio.has("port")) {
+							lmstudioCompatPort = lmstudio.get("port").getAsInt();
+						}
+					}
+				}
+			}
+		}
 	}
     
     /**
@@ -304,6 +350,19 @@ public class LlamaServer {
 				security.addProperty("apiKeyEnabled", apiKeyValidationEnabled);
 				security.addProperty("apiKey", apiKey == null ? "" : apiKey);
 				root.add("security", security);
+				
+				JsonObject compat = new JsonObject();
+				JsonObject ollama = new JsonObject();
+				ollama.addProperty("enabled", ollamaCompatEnabled);
+				ollama.addProperty("port", ollamaCompatPort);
+				compat.add("ollama", ollama);
+				
+				JsonObject lmstudio = new JsonObject();
+				lmstudio.addProperty("enabled", lmstudioCompatEnabled);
+				lmstudio.addProperty("port", lmstudioCompatPort);
+				compat.add("lmstudio", lmstudio);
+				
+				root.add("compat", compat);
 	
 				String json = GSON.toJson(root);
 	
@@ -405,6 +464,42 @@ public class LlamaServer {
 			apiKey = apiKeyValue == null ? "" : apiKeyValue;
 			saveApplicationConfig();
 		}
+    }
+    
+    public static boolean isOllamaCompatEnabled() {
+    	return ollamaCompatEnabled;
+    }
+    
+    public static int getOllamaCompatPort() {
+    	return ollamaCompatPort;
+    }
+    
+    public static boolean isLmstudioCompatEnabled() {
+    	return lmstudioCompatEnabled;
+    }
+    
+    public static int getLmstudioCompatPort() {
+    	return lmstudioCompatPort;
+    }
+    
+    public static void updateOllamaCompatConfig(boolean enabled, int port) {
+    	synchronized (APPLICATION_CONFIG_LOCK) {
+    		ollamaCompatEnabled = enabled;
+    		if (port > 0 && port <= 65535) {
+    			ollamaCompatPort = port;
+    		}
+    		saveApplicationConfig();
+    	}
+    }
+    
+    public static void updateLmstudioCompatConfig(boolean enabled, int port) {
+    	synchronized (APPLICATION_CONFIG_LOCK) {
+    		lmstudioCompatEnabled = enabled;
+    		if (port > 0 && port <= 65535) {
+    			lmstudioCompatPort = port;
+    		}
+    		saveApplicationConfig();
+    	}
     }
     
     // ==================== 默认路径的get方法 ====================

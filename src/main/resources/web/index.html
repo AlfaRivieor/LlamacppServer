@@ -55,6 +55,17 @@
                 <i class="fas fa-folder-open"></i>
                 <span>模型路径配置</span>
             </a>
+            <div class="settings-empty" style="padding: 0.25rem 1rem;">兼容服务</div>
+            <div class="nav-item" style="cursor: default;">
+                <i class="fas fa-plug"></i>
+                <span style="flex: 1;">Ollama</span>
+                <input class="form-check-input" type="checkbox" id="toggleOllamaCompat" style="margin: 0;">
+            </div>
+            <div class="nav-item" style="cursor: default;">
+                <i class="fas fa-plug"></i>
+                <span style="flex: 1;">LMStudio</span>
+                <input class="form-check-input" type="checkbox" id="toggleLmstudioCompat" style="margin: 0;">
+            </div>
             <div style="flex: 1"></div>
              <a href="#" class="nav-item danger" onclick="shutdownService(); return false;">
                 <i class="fas fa-power-off"></i>
@@ -610,6 +621,8 @@
             initModelSearch();
             loadParamConfig();
             updateChatCompletionLinkForDevice();
+            initCompatServiceToggles();
+            loadCompatServiceStatus();
         });
 
         function isMobileBrowser() {
@@ -1136,6 +1149,69 @@
                         document.body.innerHTML = '<div style="width: 100%;display:flex;justify-content:center;align-items:center;height:100vh;"><h1>服务已停止</h1></div>';
                     }
                 });
+            }
+        }
+        
+        function initCompatServiceToggles() {
+            const ollama = document.getElementById('toggleOllamaCompat');
+            if (ollama) {
+                ollama.addEventListener('change', () => setCompatServiceEnabled('ollama', ollama.checked, ollama));
+            }
+            const lmstudio = document.getElementById('toggleLmstudioCompat');
+            if (lmstudio) {
+                lmstudio.addEventListener('change', () => setCompatServiceEnabled('lmstudio', lmstudio.checked, lmstudio));
+            }
+        }
+        
+        async function loadCompatServiceStatus() {
+            try {
+                const response = await fetch('/api/sys/compat/status', { method: 'GET' });
+                const data = await response.json();
+                if (!data || !data.success || !data.data) {
+                    return;
+                }
+                
+                const ollama = document.getElementById('toggleOllamaCompat');
+                if (ollama && data.data.ollama) {
+                    const enabled = (typeof data.data.ollama.enabled === 'boolean')
+                        ? !!data.data.ollama.enabled
+                        : (typeof data.data.ollama.running === 'boolean' ? !!data.data.ollama.running : false);
+                    ollama.checked = enabled;
+                }
+                
+                const lmstudio = document.getElementById('toggleLmstudioCompat');
+                if (lmstudio && data.data.lmstudio) {
+                    const enabled = (typeof data.data.lmstudio.enabled === 'boolean')
+                        ? !!data.data.lmstudio.enabled
+                        : (typeof data.data.lmstudio.running === 'boolean' ? !!data.data.lmstudio.running : false);
+                    lmstudio.checked = enabled;
+                }
+            } catch (e) {
+            }
+        }
+        
+        async function setCompatServiceEnabled(type, enable, toggleEl) {
+            const endpoint = type === 'ollama' ? '/api/sys/ollama' : '/api/sys/lmstudio';
+            const prev = !enable;
+            if (toggleEl) toggleEl.disabled = true;
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enable: !!enable })
+                });
+                const data = await response.json();
+                if (!data || !data.success) {
+                    if (toggleEl) toggleEl.checked = prev;
+                    showToast('错误', (data && data.error) ? data.error : '操作失败', 'error');
+                    return;
+                }
+                showToast('成功', enable ? '已开启' : '已关闭', 'success');
+            } catch (e) {
+                if (toggleEl) toggleEl.checked = prev;
+                showToast('错误', '网络请求失败', 'error');
+            } finally {
+                if (toggleEl) toggleEl.disabled = false;
             }
         }
         

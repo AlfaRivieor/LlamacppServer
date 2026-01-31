@@ -10,6 +10,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.mark.llamacpp.lmstudio.LMStudio;
+import org.mark.llamacpp.ollama.Ollama;
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.exception.RequestMethodException;
@@ -62,9 +64,157 @@ public class SystemController implements BaseController {
 			this.handleVramEstimateRequest(ctx, request);
 			return true;
 		}
+		// 启用、禁用ollama兼容api
+		if (uri.startsWith("/api/sys/ollama")) {
+			this.handleOllamaEnableRequest(ctx, request);
+			return true;
+		}
+		// 启用、禁用lmstudio
+		if (uri.startsWith("/api/sys/lmstudio")) {
+			this.handleLmstudioEnableRequest(ctx, request);
+			return true;
+		}
+		// 获取兼容服务状态
+		if (uri.startsWith("/api/sys/compat/status")) {
+			this.handleCompatStatusRequest(ctx, request);
+			return true;
+		}
 		
 		
 		return false;
+	}
+	
+	private void handleCompatStatusRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		if (request.method() == HttpMethod.OPTIONS) {
+			LlamaServer.sendCorsResponse(ctx);
+			return;
+		}
+		this.assertRequestMethod(request.method() != HttpMethod.GET, "只支持GET请求");
+		try {
+			Ollama ollama = Ollama.getInstance();
+			LMStudio lmstudio = LMStudio.getInstance();
+			
+			Map<String, Object> data = new HashMap<>();
+			
+			Map<String, Object> ollamaData = new HashMap<>();
+			ollamaData.put("enabled", LlamaServer.isOllamaCompatEnabled());
+			ollamaData.put("configuredPort", LlamaServer.getOllamaCompatPort());
+			ollamaData.put("running", ollama.isRunning());
+			ollamaData.put("port", ollama.getPort());
+			data.put("ollama", ollamaData);
+			
+			Map<String, Object> lmstudioData = new HashMap<>();
+			lmstudioData.put("enabled", LlamaServer.isLmstudioCompatEnabled());
+			lmstudioData.put("configuredPort", LlamaServer.getLmstudioCompatPort());
+			lmstudioData.put("running", lmstudio.isRunning());
+			lmstudioData.put("port", lmstudio.getPort());
+			data.put("lmstudio", lmstudioData);
+			
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.info("获取兼容服务状态时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取兼容服务状态失败: " + e.getMessage()));
+		}
+	}
+	
+	private void handleOllamaEnableRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		if (request.method() == HttpMethod.OPTIONS) {
+			LlamaServer.sendCorsResponse(ctx);
+			return;
+		}
+		this.assertRequestMethod(request.method() != HttpMethod.POST, "只支持POST请求");
+		try {
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			if (content == null || content.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+				return;
+			}
+			JsonObject obj = JsonUtil.fromJson(content, JsonObject.class);
+			if (obj == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体解析失败"));
+				return;
+			}
+			if (!obj.has("enable") || obj.get("enable") == null || obj.get("enable").isJsonNull()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的enable参数"));
+				return;
+			}
+			
+			boolean enable = ParamTool.parseJsonBoolean(obj, "enable", false);
+			Integer port = JsonUtil.getJsonInt(obj, "port", null);
+			int bindPort = port == null ? LlamaServer.getOllamaCompatPort() : port.intValue();
+			if (bindPort <= 0 || bindPort > 65535) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("port参数不合法"));
+				return;
+			}
+			
+			Ollama ollama = Ollama.getInstance();
+			if (enable) {
+				ollama.start(bindPort);
+			} else {
+				ollama.stop();
+			}
+			
+			LlamaServer.updateOllamaCompatConfig(enable, bindPort);
+			
+			Map<String, Object> data = new HashMap<>();
+			data.put("enable", enable);
+			data.put("port", bindPort);
+			data.put("running", ollama.isRunning());
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.info("处理ollama启停请求时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("处理ollama启停失败: " + e.getMessage()));
+		}
+	}
+	
+	private void handleLmstudioEnableRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		if (request.method() == HttpMethod.OPTIONS) {
+			LlamaServer.sendCorsResponse(ctx);
+			return;
+		}
+		this.assertRequestMethod(request.method() != HttpMethod.POST, "只支持POST请求");
+		try {
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			if (content == null || content.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+				return;
+			}
+			JsonObject obj = JsonUtil.fromJson(content, JsonObject.class);
+			if (obj == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体解析失败"));
+				return;
+			}
+			if (!obj.has("enable") || obj.get("enable") == null || obj.get("enable").isJsonNull()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的enable参数"));
+				return;
+			}
+			
+			boolean enable = ParamTool.parseJsonBoolean(obj, "enable", false);
+			Integer port = JsonUtil.getJsonInt(obj, "port", null);
+			int bindPort = port == null ? LlamaServer.getLmstudioCompatPort() : port.intValue();
+			if (bindPort <= 0 || bindPort > 65535) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("port参数不合法"));
+				return;
+			}
+			
+			LMStudio lmstudio = LMStudio.getInstance();
+			if (enable) {
+				lmstudio.start(bindPort);
+			} else {
+				lmstudio.stop();
+			}
+			
+			LlamaServer.updateLmstudioCompatConfig(enable, bindPort);
+			
+			Map<String, Object> data = new HashMap<>();
+			data.put("enable", enable);
+			data.put("port", bindPort);
+			data.put("running", lmstudio.isRunning());
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.info("处理lmstudio启停请求时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("处理lmstudio启停失败: " + e.getMessage()));
+		}
 	}
 	
 	
