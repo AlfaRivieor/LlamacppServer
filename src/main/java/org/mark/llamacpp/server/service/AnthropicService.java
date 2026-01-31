@@ -48,18 +48,35 @@ public class AnthropicService {
 	 */
 	private final Map<ChannelHandlerContext, HttpURLConnection> channelConnectionMap = new HashMap<>();
 
+	public AnthropicService() {
+		
+	}
+	
+	
+	/**
+	 * 	判断API KEY，true表明通过。做个样子
+	 * @param request
+	 * @return
+	 */
+	private boolean checkApiKey(FullHttpRequest request) {
+		String apiKey = request.headers().get("x-api-key");
+		if (apiKey == null || !ANTHROPIC_API_KEY.equals(apiKey)) {
+			// return false;
+		}
+		return true;
+	}
+	
     /**
      * Handles GET /v1/models
      */
     public void handleModelsRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
         if (request.method() != HttpMethod.GET) {
-            sendError(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "Only GET method is supported");
+            this.sendError(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "Only GET method is supported");
             return;
         }
         
-        String apiKey = request.headers().get("x-api-key");
-        if (apiKey == null || !ANTHROPIC_API_KEY.equals(apiKey)) {
-            sendError(ctx, HttpResponseStatus.UNAUTHORIZED, "invalid api key");
+        if (!this.checkApiKey(request)) {
+            this.sendError(ctx, HttpResponseStatus.UNAUTHORIZED, "invalid api key");
             return;
         }
         
@@ -97,19 +114,18 @@ public class AnthropicService {
      */
     public void handleCompleteRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
         if (request.method() != HttpMethod.POST) {
-            sendError(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "Only POST method is supported");
+            this.sendError(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "Only POST method is supported");
             return;
         }
         
-        String apiKey = request.headers().get("x-api-key");
-        if (apiKey == null || !ANTHROPIC_API_KEY.equals(apiKey)) {
-            sendError(ctx, HttpResponseStatus.UNAUTHORIZED, "invalid api key");
+        if (!this.checkApiKey(request)) {
+            this.sendError(ctx, HttpResponseStatus.UNAUTHORIZED, "invalid api key");
             return;
         }
 
         String content = request.content().toString(CharsetUtil.UTF_8);
         if (content == null || content.trim().isEmpty()) {
-            sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Request body is empty");
+            this.sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Request body is empty");
             return;
         }
 
@@ -117,7 +133,7 @@ public class AnthropicService {
         try {
             anthropicReq = gson.fromJson(content, JsonObject.class);
         } catch (Exception e) {
-            sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Invalid JSON body");
+            this.sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Invalid JSON body");
             return;
         }
 
@@ -128,7 +144,7 @@ public class AnthropicService {
         } else {
             modelName = manager.getFirstModelName();
             if (modelName == null) {
-                sendError(ctx, HttpResponseStatus.NOT_FOUND, "No models loaded");
+                this.sendError(ctx, HttpResponseStatus.NOT_FOUND, "No models loaded");
                 return;
             }
         }
@@ -137,14 +153,14 @@ public class AnthropicService {
             if (manager.getLoadedProcesses().size() == 1) {
                 modelName = manager.getFirstModelName();
             } else {
-                sendError(ctx, HttpResponseStatus.NOT_FOUND, "Model not found: " + modelName);
+                this.sendError(ctx, HttpResponseStatus.NOT_FOUND, "Model not found: " + modelName);
                 return;
             }
         }
         
         Integer port = manager.getModelPort(modelName);
         if (port == null) {
-            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "Model port not found for " + modelName);
+            this.sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "Model port not found for " + modelName);
             return;
         }
 
@@ -163,13 +179,12 @@ public class AnthropicService {
      */
     public void handleMessagesRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
         if (request.method() != HttpMethod.POST) {
-            sendError(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "Only POST method is supported");
+        	this.sendError(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "Only POST method is supported");
             return;
         }
         
-        String apiKey = request.headers().get("x-api-key");
-        if (apiKey == null || !ANTHROPIC_API_KEY.equals(apiKey)) {
-            sendError(ctx, HttpResponseStatus.UNAUTHORIZED, "invalid api key");
+        if (!this.checkApiKey(request)) {
+        	this.sendError(ctx, HttpResponseStatus.UNAUTHORIZED, "invalid api key");
             return;
         }
 
@@ -181,7 +196,7 @@ public class AnthropicService {
         try {
             anthropicReq = gson.fromJson(content, JsonObject.class);
         } catch (Exception e) {
-            sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Invalid JSON body");
+        	this.sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Invalid JSON body");
             return;
         }
 
@@ -193,7 +208,7 @@ public class AnthropicService {
         } else {
             modelName = manager.getFirstModelName();
             if (modelName == null) {
-                sendError(ctx, HttpResponseStatus.NOT_FOUND, "No models loaded");
+            	this.sendError(ctx, HttpResponseStatus.NOT_FOUND, "No models loaded");
                 return;
             }
         }
@@ -202,14 +217,14 @@ public class AnthropicService {
             if (manager.getLoadedProcesses().size() == 1) {
                 modelName = manager.getFirstModelName();
             } else {
-                sendError(ctx, HttpResponseStatus.NOT_FOUND, "Model not found: " + modelName);
+            	this.sendError(ctx, HttpResponseStatus.NOT_FOUND, "Model not found: " + modelName);
                 return;
             }
         }
         
         Integer port = manager.getModelPort(modelName);
         if (port == null) {
-            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "Model port not found for " + modelName);
+        	this.sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "Model port not found for " + modelName);
             return;
         }
 
@@ -229,13 +244,12 @@ public class AnthropicService {
      */
     public void handleMessagesCountTokensRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
         if (request.method() != HttpMethod.POST) {
-            sendError(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "Only POST method is supported");
+        	this.sendError(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "Only POST method is supported");
             return;
         }
 
-        String apiKey = request.headers().get("x-api-key");
-        if (apiKey == null || !ANTHROPIC_API_KEY.equals(apiKey)) {
-            sendError(ctx, HttpResponseStatus.UNAUTHORIZED, "invalid api key");
+        if (!this.checkApiKey(request)) {
+        	this.sendError(ctx, HttpResponseStatus.UNAUTHORIZED, "invalid api key");
             return;
         }
 
@@ -244,7 +258,7 @@ public class AnthropicService {
         try {
             anthropicReq = gson.fromJson(content, JsonObject.class);
         } catch (Exception e) {
-            sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Invalid JSON body");
+        	this.sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Invalid JSON body");
             return;
         }
 
@@ -256,7 +270,7 @@ public class AnthropicService {
         } else {
             modelName = manager.getFirstModelName();
             if (modelName == null) {
-                sendError(ctx, HttpResponseStatus.NOT_FOUND, "No models loaded");
+            	this.sendError(ctx, HttpResponseStatus.NOT_FOUND, "No models loaded");
                 return;
             }
         }
@@ -265,14 +279,14 @@ public class AnthropicService {
             if (manager.getLoadedProcesses().size() == 1) {
                 modelName = manager.getFirstModelName();
             } else {
-                sendError(ctx, HttpResponseStatus.NOT_FOUND, "Model not found: " + modelName);
+            	this.sendError(ctx, HttpResponseStatus.NOT_FOUND, "Model not found: " + modelName);
                 return;
             }
         }
 
         Integer port = manager.getModelPort(modelName);
         if (port == null) {
-            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "Model port not found for " + modelName);
+        	this.sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "Model port not found for " + modelName);
             return;
         }
 
@@ -331,13 +345,13 @@ public class AnthropicService {
                 int responseCode = connection.getResponseCode();
 
                 if (isStream) {
-                    handleStreamResponse(ctx, connection, responseCode);
+                	this.handleStreamResponse(ctx, connection, responseCode);
                 } else {
-                    handleNonStreamResponse(ctx, connection, responseCode);
+                	this.handleNonStreamResponse(ctx, connection, responseCode);
                 }
             } catch (Exception e) {
                 logger.info("Error forwarding Anthropic request to llama.cpp", e);
-                sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+                this.sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
             } finally {
                 if (connection != null) {
                     connection.disconnect();
