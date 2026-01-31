@@ -191,8 +191,6 @@ public class AnthropicService {
         String content = request.content().toString(CharsetUtil.UTF_8);
         JsonObject anthropicReq;
         
-        logger.info("请求内容：{}", content);
-        
         try {
             anthropicReq = gson.fromJson(content, JsonObject.class);
         } catch (Exception e) {
