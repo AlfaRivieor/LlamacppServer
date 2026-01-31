@@ -105,7 +105,7 @@ public class OllamaChatService {
 			Ollama.sendOllamaError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "Model port not found: " + modelName);
 			return;
 		}
-		
+		// 是否开启流式传输
 		boolean isStream = true;
 		try {
 			if (ollamaReq.has("stream") && ollamaReq.get("stream").isJsonPrimitive()) {
@@ -113,7 +113,7 @@ public class OllamaChatService {
 			}
 		} catch (Exception ignore) {
 		}
-		
+		// 是否带了工具
 		boolean hasTools = false;
 		try {
 			JsonElement tools = ollamaReq.get("tools");
@@ -123,18 +123,30 @@ public class OllamaChatService {
 		if (hasTools) {
 			isStream = false;
 		}
-		
+		// 是否开启thinking
+		boolean enableThinking = false;
+		try {
+			JsonElement thkning = ollamaReq.get("think");
+			enableThinking = thkning != null && !thkning.isJsonNull() && thkning.isJsonArray() && thkning.getAsJsonArray().size() > 0;
+		} catch (Exception ignore) {
+		}
+		if (hasTools) {
+			isStream = false;
+		}
 		JsonElement messages = ollamaReq.get("messages");
 		if (messages == null || !messages.isJsonArray()) {
 			Ollama.sendOllamaError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing required parameter: messages");
 			return;
 		}
-		
+		// 
 		JsonObject openAiReq = new JsonObject();
 		openAiReq.addProperty("model", modelName);
 		openAiReq.add("messages", OllamaApiTool.normalizeOllamaMessagesForOpenAI(messages.getAsJsonArray()));
 		openAiReq.addProperty("stream", isStream);
+		openAiReq.addProperty("enable_thinking", enableThinking);
+		
 		this.applyOllamaOptionsToOpenAI(openAiReq, ollamaReq.get("options"));
+		// 复制options中的其它参数
 		OllamaApiTool.applyOllamaToolsToOpenAI(openAiReq, ollamaReq);
 
 		String requestBody = JsonUtil.toJson(openAiReq);
