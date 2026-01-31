@@ -3,7 +3,9 @@ package org.mark.llamacpp.server.controller;
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,6 +79,16 @@ public class SystemController implements BaseController {
 		// 获取兼容服务状态
 		if (uri.startsWith("/api/sys/compat/status")) {
 			this.handleCompatStatusRequest(ctx, request);
+			return true;
+		}
+		// 保存系统设置
+		if (uri.startsWith("/api/sys/setting")) {
+			this.handleSysSettingRequest(ctx, request);
+			return true;
+		}
+		// 保存搜索设置
+		if (uri.startsWith("/api/search/setting")) {
+			this.handleSearchSettingRequest(ctx, request);
 			return true;
 		}
 		
@@ -215,6 +227,127 @@ public class SystemController implements BaseController {
 			logger.info("处理lmstudio启停请求时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("处理lmstudio启停失败: " + e.getMessage()));
 		}
+	}
+
+	private void handleSysSettingRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		if (request.method() == HttpMethod.OPTIONS) {
+			LlamaServer.sendCorsResponse(ctx);
+			return;
+		}
+		this.assertRequestMethod(request.method() != HttpMethod.POST, "只支持POST请求");
+		try {
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			if (content == null || content.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+				return;
+			}
+			JsonObject obj = JsonUtil.fromJson(content, JsonObject.class);
+			if (obj == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体解析失败"));
+				return;
+			}
+
+			Integer ollamaPort = firstPort(obj, "ollamaPort", "ollama_port", "ollamaCompatPort", "ollama_compat_port");
+			Integer lmstudioPort = firstPort(obj, "lmstudioPort", "lmstudio_port", "lmstudioCompatPort", "lmstudio_compat_port");
+
+			if (ollamaPort == null && lmstudioPort == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少端口参数"));
+				return;
+			}
+
+			if (ollamaPort != null) {
+				if (!isValidPort(ollamaPort.intValue())) {
+					LlamaServer.sendJsonResponse(ctx, ApiResponse.error("ollamaPort参数不合法"));
+					return;
+				}
+				LlamaServer.updateOllamaCompatConfig(LlamaServer.isOllamaCompatEnabled(), ollamaPort.intValue());
+			}
+
+			if (lmstudioPort != null) {
+				if (!isValidPort(lmstudioPort.intValue())) {
+					LlamaServer.sendJsonResponse(ctx, ApiResponse.error("lmstudioPort参数不合法"));
+					return;
+				}
+				LlamaServer.updateLmstudioCompatConfig(LlamaServer.isLmstudioCompatEnabled(), lmstudioPort.intValue());
+			}
+
+			Map<String, Object> data = new HashMap<>();
+			Map<String, Object> ollama = new HashMap<>();
+			ollama.put("enabled", LlamaServer.isOllamaCompatEnabled());
+			ollama.put("port", LlamaServer.getOllamaCompatPort());
+			data.put("ollama", ollama);
+
+			Map<String, Object> lmstudio = new HashMap<>();
+			lmstudio.put("enabled", LlamaServer.isLmstudioCompatEnabled());
+			lmstudio.put("port", LlamaServer.getLmstudioCompatPort());
+			data.put("lmstudio", lmstudio);
+
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.info("处理系统设置请求时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("保存系统设置失败: " + e.getMessage()));
+		}
+	}
+
+	private void handleSearchSettingRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		if (request.method() == HttpMethod.OPTIONS) {
+			LlamaServer.sendCorsResponse(ctx);
+			return;
+		}
+		this.assertRequestMethod(request.method() != HttpMethod.POST, "只支持POST请求");
+		try {
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			if (content == null || content.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+				return;
+			}
+			JsonObject obj = JsonUtil.fromJson(content, JsonObject.class);
+			if (obj == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体解析失败"));
+				return;
+			}
+
+			String apiKey = JsonUtil.getJsonString(obj, "zhipu_search_apikey", null);
+			if (apiKey == null) {
+				apiKey = JsonUtil.getJsonString(obj, "apiKey", null);
+			}
+			apiKey = apiKey == null ? "" : apiKey.trim();
+
+			JsonObject out = new JsonObject();
+			out.addProperty("apiKey", apiKey);
+			String json = JsonUtil.toJson(out);
+
+			Path configPath = Paths.get("config", "zhipu_search.json");
+			if (!Files.exists(configPath.getParent())) {
+				Files.createDirectories(configPath.getParent());
+			}
+			Files.write(configPath, json.getBytes(StandardCharsets.UTF_8));
+
+			Map<String, Object> data = new HashMap<>();
+			data.put("saved", true);
+			data.put("file", configPath.toString());
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.info("处理搜索设置请求时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("保存搜索设置失败: " + e.getMessage()));
+		}
+	}
+
+	private static Integer firstPort(JsonObject obj, String... keys) {
+		if (obj == null || keys == null) {
+			return null;
+		}
+		for (String k : keys) {
+			Integer v = JsonUtil.getJsonInt(obj, k, null);
+			if (v != null) {
+				return v;
+			}
+		}
+		return null;
+	}
+
+	private static boolean isValidPort(int port) {
+		return port > 0 && port <= 65535;
 	}
 	
 	

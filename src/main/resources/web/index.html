@@ -27,10 +27,6 @@
                 <i class="fas fa-comments"></i>
                 <span>对话界面</span>
             </a>
-            <a href="chat/concurrency.html" class="nav-item" target="_blank">
-                <i class="fas fa-bolt"></i>
-                <span>压力测试</span>
-            </a>
             <a href="#" class="nav-item" id="nav-download" onclick="showDownloadManager(); return false;">
                 <i class="fas fa-download"></i>
                 <span>下载管理</span>
@@ -43,10 +39,6 @@
                 <i class="fas fa-terminal"></i>
                 <span>控制台日志</span>
             </a>
-            <a href="tools/mcp-manager.html" class="nav-item" target="_blank" id="nav-mcp-manager">
-                <i class="fas fa-toolbox"></i>
-                <span>MCP 管理</span>
-            </a>
             <a href="#" class="nav-item" id="nav-llamacpp" onclick="showLlamaCppSetting(); return false;">
                 <i class="fas fa-microchip"></i>
                 <span>Llama.cpp 路径</span>
@@ -55,17 +47,10 @@
                 <i class="fas fa-folder-open"></i>
                 <span>模型路径配置</span>
             </a>
-            <div class="settings-empty" style="padding: 0.25rem 1rem;">兼容服务</div>
-            <div class="nav-item" style="cursor: default;">
-                <i class="fas fa-plug"></i>
-                <span style="flex: 1;">Ollama</span>
-                <input class="form-check-input" type="checkbox" id="toggleOllamaCompat" style="margin: 0;">
-            </div>
-            <div class="nav-item" style="cursor: default;">
-                <i class="fas fa-plug"></i>
-                <span style="flex: 1;">LMStudio</span>
-                <input class="form-check-input" type="checkbox" id="toggleLmstudioCompat" style="margin: 0;">
-            </div>
+            <a href="#" class="nav-item" id="nav-settings" onclick="showSettingsPage(); return false;">
+                <i class="fas fa-cog"></i>
+                <span>设置</span>
+            </a>
             <div style="flex: 1"></div>
              <a href="#" class="nav-item danger" onclick="shutdownService(); return false;">
                 <i class="fas fa-power-off"></i>
@@ -293,6 +278,128 @@
                 <div id="modelPathList">
                     <div class="loading-spinner">
                         <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <main class="main-area" id="main-settings" style="display: none">
+        <div class="top-bar">
+            <h1 class="page-title">设置</h1>
+        </div>
+
+        <div class="content-scrollable">
+            <div class="settings-layout">
+                <div class="settings-menu" role="tablist" aria-label="设置选项">
+                    <button class="settings-menu-item active" type="button" role="tab" aria-selected="true" data-tab="general" onclick="selectSettingsTab('general')">
+                        <i class="fas fa-sliders-h"></i>
+                        <span>常规设置</span>
+                    </button>
+                    <button class="settings-menu-item" type="button" role="tab" aria-selected="false" data-tab="stress" onclick="selectSettingsTab('stress')">
+                        <i class="fas fa-bolt"></i>
+                        <span>压力测试</span>
+                    </button>
+                    <button class="settings-menu-item" type="button" role="tab" aria-selected="false" data-tab="mcp" onclick="selectSettingsTab('mcp')">
+                        <i class="fas fa-toolbox"></i>
+                        <span>MCP 管理</span>
+                    </button>
+                </div>
+
+                <div class="settings-content">
+                    <div class="settings-panel" data-tab-panel="general">
+                        <div class="model-list-container">
+                            <div class="model-list-header">
+                                <h2>常规设置</h2>
+                            </div>
+                            <div class="settings-panel-body">
+                                <div class="form-group" style="margin: 0;">
+                                    <label class="form-label">兼容服务</label>
+                                    <small class="form-text">用于快速启停本机兼容服务（Ollama / LMStudio）。</small>
+                                </div>
+                                <div class="settings-toggle-list">
+                                    <div class="settings-toggle-row">
+                                        <div class="settings-toggle-title">
+                                            <i class="fas fa-plug"></i>
+                                            <span>Ollama</span>
+                                        </div>
+                                        <div class="settings-compat-actions">
+                                            <div class="settings-port-field">
+                                                <span class="settings-port-label">端口</span>
+                                                <input class="form-control settings-port-input" type="number" min="1" max="65535" step="1" id="ollamaCompatPortInput" placeholder="11434">
+                                            </div>
+                                            <div class="form-check" style="margin: 0;">
+                                                <input class="form-check-input" type="checkbox" id="toggleOllamaCompat">
+                                                <label class="form-check-label" for="toggleOllamaCompat">启用</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="settings-toggle-row">
+                                        <div class="settings-toggle-title">
+                                            <i class="fas fa-plug"></i>
+                                            <span>LMStudio</span>
+                                        </div>
+                                        <div class="settings-compat-actions">
+                                            <div class="settings-port-field">
+                                                <span class="settings-port-label">端口</span>
+                                                <input class="form-control settings-port-input" type="number" min="1" max="65535" step="1" id="lmstudioCompatPortInput" placeholder="1234">
+                                            </div>
+                                            <div class="form-check" style="margin: 0;">
+                                                <input class="form-check-input" type="checkbox" id="toggleLmstudioCompat">
+                                                <label class="form-check-label" for="toggleLmstudioCompat">启用</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="settings-actions-row">
+                                    <button class="btn btn-primary" type="button" id="saveCompatPortsBtn">保存端口</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="model-list-container" style="margin-top: 1rem;">
+                            <div class="model-list-header">
+                                <h2>联网搜索</h2>
+                            </div>
+                            <div class="settings-panel-body">
+                                <div class="form-group" style="margin: 0;">
+                                    <label class="form-label" for="zhipuSearchApiKeyInput">智谱 API Key</label>
+                                    <input type="password" class="form-control" id="zhipuSearchApiKeyInput" placeholder="填写后点击保存">
+                                    <small class="form-text">默认使用智谱的联网搜索工具，由于本软件默认只有Http，无法保证网络安全，请确保在内网等安全的环境下使用，保护好自己的Key（我还没有时间开发基于搜索引擎的联网搜索，就拿这个凑合吧）。</small>
+                                </div>
+                                <div class="settings-actions-row">
+                                    <button class="btn btn-primary" type="button" id="saveZhipuSearchApiKeyBtn">保存</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel" data-tab-panel="stress" style="display: none;">
+                        <div class="model-list-container">
+                            <div class="model-list-header">
+                                <h2>压力测试</h2>
+                                <div style="margin-left: auto;">
+                                    <a class="btn btn-secondary" href="chat/concurrency.html" target="_blank" rel="noopener">新窗口打开</a>
+                                </div>
+                            </div>
+                            <div class="settings-panel-body">
+                                <iframe class="settings-embed-frame" title="压力测试" data-src="chat/concurrency.html" loading="lazy"></iframe>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel" data-tab-panel="mcp" style="display: none;">
+                        <div class="model-list-container">
+                            <div class="model-list-header">
+                                <h2>MCP 管理</h2>
+                                <div style="margin-left: auto;">
+                                    <a class="btn btn-secondary" href="tools/mcp-manager.html" target="_blank" rel="noopener">新窗口打开</a>
+                                </div>
+                            </div>
+                            <div class="settings-panel-body">
+                                <iframe class="settings-embed-frame" title="MCP 管理" data-src="tools/mcp-manager.html" loading="lazy"></iframe>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -622,6 +729,7 @@
             loadParamConfig();
             updateChatCompletionLinkForDevice();
             initCompatServiceToggles();
+            initSettingsForms();
             loadCompatServiceStatus();
         });
 
@@ -1162,6 +1270,17 @@
                 lmstudio.addEventListener('change', () => setCompatServiceEnabled('lmstudio', lmstudio.checked, lmstudio));
             }
         }
+
+        function initSettingsForms() {
+            const savePortsBtn = document.getElementById('saveCompatPortsBtn');
+            if (savePortsBtn) {
+                savePortsBtn.addEventListener('click', saveCompatPorts);
+            }
+            const saveZhipuBtn = document.getElementById('saveZhipuSearchApiKeyBtn');
+            if (saveZhipuBtn) {
+                saveZhipuBtn.addEventListener('click', saveZhipuSearchApiKey);
+            }
+        }
         
         async function loadCompatServiceStatus() {
             try {
@@ -1178,6 +1297,13 @@
                         : (typeof data.data.ollama.running === 'boolean' ? !!data.data.ollama.running : false);
                     ollama.checked = enabled;
                 }
+                const ollamaPort = document.getElementById('ollamaCompatPortInput');
+                if (ollamaPort && data.data.ollama) {
+                    const p = data.data.ollama.configuredPort || data.data.ollama.port;
+                    if (typeof p === 'number' && p > 0) {
+                        ollamaPort.value = String(p);
+                    }
+                }
                 
                 const lmstudio = document.getElementById('toggleLmstudioCompat');
                 if (lmstudio && data.data.lmstudio) {
@@ -1186,7 +1312,75 @@
                         : (typeof data.data.lmstudio.running === 'boolean' ? !!data.data.lmstudio.running : false);
                     lmstudio.checked = enabled;
                 }
+                const lmstudioPort = document.getElementById('lmstudioCompatPortInput');
+                if (lmstudioPort && data.data.lmstudio) {
+                    const p = data.data.lmstudio.configuredPort || data.data.lmstudio.port;
+                    if (typeof p === 'number' && p > 0) {
+                        lmstudioPort.value = String(p);
+                    }
+                }
             } catch (e) {
+            }
+        }
+
+        function readPortFromInput(id) {
+            const el = document.getElementById(id);
+            if (!el) return null;
+            const raw = (el.value || '').trim();
+            if (!raw) return null;
+            const n = Number(raw);
+            if (!Number.isFinite(n)) return null;
+            const port = Math.trunc(n);
+            if (port <= 0 || port > 65535) return null;
+            return port;
+        }
+
+        async function saveCompatPorts() {
+            const ollamaPort = readPortFromInput('ollamaCompatPortInput');
+            const lmstudioPort = readPortFromInput('lmstudioCompatPortInput');
+            if (!ollamaPort && !lmstudioPort) {
+                showToast('错误', '请至少填写一个端口', 'error');
+                return;
+            }
+            const payload = {};
+            if (ollamaPort) payload.ollamaPort = ollamaPort;
+            if (lmstudioPort) payload.lmstudioPort = lmstudioPort;
+            try {
+                const response = await fetch('/api/sys/setting', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (!data || !data.success) {
+                    showToast('错误', (data && data.error) ? data.error : '保存失败', 'error');
+                    return;
+                }
+                showToast('成功', '端口已保存', 'success');
+                loadCompatServiceStatus();
+            } catch (e) {
+                showToast('错误', '网络请求失败', 'error');
+            }
+        }
+
+        async function saveZhipuSearchApiKey() {
+            const el = document.getElementById('zhipuSearchApiKeyInput');
+            const apiKey = el ? (el.value || '').trim() : '';
+            try {
+                const response = await fetch('/api/search/setting', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zhipu_search_apikey: apiKey })
+                });
+                const data = await response.json();
+                if (!data || !data.success) {
+                    showToast('错误', (data && data.error) ? data.error : '保存失败', 'error');
+                    return;
+                }
+                showToast('成功', '已保存', 'success');
+                if (el) el.value = '';
+            } catch (e) {
+                showToast('错误', '网络请求失败', 'error');
             }
         }
         
@@ -1195,10 +1389,13 @@
             const prev = !enable;
             if (toggleEl) toggleEl.disabled = true;
             try {
+                const body = { enable: !!enable };
+                const port = type === 'ollama' ? readPortFromInput('ollamaCompatPortInput') : readPortFromInput('lmstudioCompatPortInput');
+                if (port) body.port = port;
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enable: !!enable })
+                    body: JSON.stringify(body)
                 });
                 const data = await response.json();
                 if (!data || !data.success) {
@@ -1207,6 +1404,7 @@
                     return;
                 }
                 showToast('成功', enable ? '已开启' : '已关闭', 'success');
+                loadCompatServiceStatus();
             } catch (e) {
                 if (toggleEl) toggleEl.checked = prev;
                 showToast('错误', '网络请求失败', 'error');
@@ -1231,6 +1429,7 @@
             document.getElementById('main-model-list').style.display = '';
             document.getElementById('main-llamacpp-setting').style.display = 'none';
             document.getElementById('main-model-path-setting').style.display = 'none';
+            document.getElementById('main-settings').style.display = 'none';
             document.getElementById('main-hf').style.display = 'none';
             document.getElementById('main-download').style.display = 'none';
             //refreshModels();
@@ -1246,6 +1445,7 @@
             document.getElementById('main-model-list').style.display = 'none';
             document.getElementById('main-llamacpp-setting').style.display = '';
             document.getElementById('main-model-path-setting').style.display = 'none';
+            document.getElementById('main-settings').style.display = 'none';
             document.getElementById('main-hf').style.display = 'none';
             document.getElementById('main-download').style.display = 'none';
             loadLlamaCppList();
@@ -1261,6 +1461,7 @@
             document.getElementById('main-model-list').style.display = 'none';
             document.getElementById('main-llamacpp-setting').style.display = 'none';
             document.getElementById('main-model-path-setting').style.display = '';
+            document.getElementById('main-settings').style.display = 'none';
             document.getElementById('main-hf').style.display = 'none';
             document.getElementById('main-download').style.display = 'none';
             loadModelPathList();
@@ -1276,6 +1477,7 @@
             document.getElementById('main-model-list').style.display = 'none';
             document.getElementById('main-llamacpp-setting').style.display = 'none';
             document.getElementById('main-model-path-setting').style.display = 'none';
+            document.getElementById('main-settings').style.display = 'none';
             document.getElementById('main-hf').style.display = '';
             document.getElementById('main-download').style.display = 'none';
             const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
@@ -1290,6 +1492,7 @@
             document.getElementById('main-llamacpp-setting').style.display = 'none';
             document.getElementById('main-model-path-setting').style.display = 'none';
             document.getElementById('main-hf').style.display = 'none';
+            document.getElementById('main-settings').style.display = 'none';
             const main = document.getElementById('main-download');
             const hasEntered = main && main.dataset && main.dataset.entered === '1';
             if (main) main.style.display = '';
@@ -1300,6 +1503,45 @@
             navItems.forEach(item => item.classList.remove('active'));
             const nav = document.getElementById('nav-download');
             if (nav) nav.classList.add('active');
+        }
+
+        function showSettingsPage(tab) {
+            document.getElementById('main-model-list').style.display = 'none';
+            document.getElementById('main-llamacpp-setting').style.display = 'none';
+            document.getElementById('main-model-path-setting').style.display = 'none';
+            document.getElementById('main-hf').style.display = 'none';
+            document.getElementById('main-download').style.display = 'none';
+            const main = document.getElementById('main-settings');
+            if (main) main.style.display = '';
+
+            selectSettingsTab(tab || 'general');
+
+            const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
+            navItems.forEach(item => item.classList.remove('active'));
+            const nav = document.getElementById('nav-settings');
+            if (nav) nav.classList.add('active');
+        }
+
+        function selectSettingsTab(tab) {
+            const menuItems = document.querySelectorAll('#main-settings .settings-menu-item');
+            menuItems.forEach(btn => {
+                const active = btn && btn.dataset && btn.dataset.tab === tab;
+                btn.classList.toggle('active', !!active);
+                btn.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
+
+            const panels = document.querySelectorAll('#main-settings .settings-panel');
+            panels.forEach(panel => {
+                const show = panel && panel.dataset && panel.dataset.tabPanel === tab;
+                panel.style.display = show ? '' : 'none';
+                if (show) {
+                    const frame = panel.querySelector('iframe[data-src]');
+                    if (frame && !frame.getAttribute('src')) {
+                        const src = frame.dataset ? frame.dataset.src : '';
+                        if (src) frame.setAttribute('src', src);
+                    }
+                }
+            });
         }
 
         // 加载模型路径列表

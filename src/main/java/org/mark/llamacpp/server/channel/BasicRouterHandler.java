@@ -91,6 +91,10 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			ctx.close();
 			return;
 		}
+		if (request.method() == HttpMethod.OPTIONS) {
+			LlamaServer.sendCorsResponse(ctx);
+			return;
+		}
 		try {
 			// 处理模型API请求
 			if (this.isApiRequest(uri)) {

@@ -8,11 +8,13 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.UUID;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.tools.JsonUtil;
 
 
@@ -23,10 +25,10 @@ public class ZhipuWebSearchService {
 
 	private static final String ENDPOINT = "https://open.bigmodel.cn/api/paas/v4/web_search";
 
-	private final String token;
+	private volatile String token;
 
 	public ZhipuWebSearchService() {
-		this(loadTokenFromApplicationConfig());
+		this(loadTokenFromZhipuSearchConfig());
 	}
 
 	public ZhipuWebSearchService(String token) {
@@ -45,8 +47,15 @@ public class ZhipuWebSearchService {
 		if (query == null || query.trim().isEmpty()) {
 			throw new IllegalArgumentException("search_query is empty");
 		}
+		String loaded = loadTokenFromZhipuSearchConfig();
+		if (loaded != null && !loaded.isBlank()) {
+			String trimmed = loaded.trim();
+			if (!trimmed.equals(this.token)) {
+				this.token = trimmed;
+			}
+		}
 		if (this.token.isBlank()) {
-			throw new IllegalStateException("Zhipu token is empty. Set config/application.json zhipu.apiKey.");
+			throw new IllegalStateException("Zhipu token is empty. Set config/zhipu_search.json apiKey.");
 		}
 
 		int finalCount = count <= 0 ? 10 : Math.min(count, 50);
@@ -115,20 +124,30 @@ public class ZhipuWebSearchService {
 		}
 	}
 
-	private static String loadTokenFromApplicationConfig() {
-		JsonObject root = LlamaServer.readApplicationConfig();
-		if (root == null) {
+	private static String loadTokenFromZhipuSearchConfig() {
+		try {
+			Path configPath = Paths.get("config", "zhipu_search.json");
+			if (!Files.exists(configPath)) {
+				return "";
+			}
+			String json = new String(Files.readAllBytes(configPath), StandardCharsets.UTF_8);
+			JsonObject root = JsonUtil.fromJson(json, JsonObject.class);
+			if (root == null) {
+				return "";
+			}
+			String t = null;
+			if (root.has("apiKey") && root.get("apiKey") != null && !root.get("apiKey").isJsonNull()) {
+				t = root.get("apiKey").getAsString();
+			} else if (root.has("zhipu_search_apikey") && root.get("zhipu_search_apikey") != null
+					&& !root.get("zhipu_search_apikey").isJsonNull()) {
+				t = root.get("zhipu_search_apikey").getAsString();
+			}
+			if (t != null && !t.isBlank()) {
+				return t.trim();
+			}
+			return "";
+		} catch (Exception e) {
 			return "";
 		}
-		if (root.has("zhipu") && root.get("zhipu").isJsonObject()) {
-			JsonObject zhipu = root.getAsJsonObject("zhipu");
-			if (zhipu.has("apiKey")) {
-				String t = zhipu.get("apiKey").getAsString();
-				if (t != null && !t.isBlank()) {
-					return t.trim();
-				}
-			}
-		}
-		return "";
 	}
 }

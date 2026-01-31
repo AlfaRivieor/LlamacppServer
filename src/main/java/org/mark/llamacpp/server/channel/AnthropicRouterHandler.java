@@ -3,6 +3,7 @@ package org.mark.llamacpp.server.channel;
 
 import org.mark.llamacpp.server.service.AnthropicService;
 import org.mark.llamacpp.server.struct.ApiResponse;
+import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.tools.JsonUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,7 @@ import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.util.CharsetUtil;
@@ -25,7 +27,7 @@ import io.netty.util.CharsetUtil;
  */
 public class AnthropicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
-	private static final Logger logger = LoggerFactory.getLogger(OpenAIRouterHandler.class);
+	private static final Logger logger = LoggerFactory.getLogger(AnthropicRouterHandler.class);
 
 	/**
 	 * 	OpenAI接口的实现。
@@ -39,6 +41,10 @@ public class AnthropicRouterHandler extends SimpleChannelInboundHandler<FullHttp
 
 	@Override
 	protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
+		if (request.method() == HttpMethod.OPTIONS) {
+			LlamaServer.sendCorsResponse(ctx);
+			return;
+		}
 		String uri = request.uri();
 		this.handleApiRequest(ctx, request, uri);
 		return;
@@ -92,6 +98,9 @@ public class AnthropicRouterHandler extends SimpleChannelInboundHandler<FullHttp
 		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
 		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
 		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
+		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
+		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
 		response.content().writeBytes(content);
 
 		ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {

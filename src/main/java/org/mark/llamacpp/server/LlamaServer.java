@@ -48,6 +48,7 @@ import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -813,6 +814,13 @@ public class LlamaServer {
 	
 	//================================================================================================
 	
+	private static void setCorsHeaders(HttpHeaders headers) {
+		headers.set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+		headers.set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
+		headers.set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
+		headers.set(HttpHeaderNames.ACCESS_CONTROL_MAX_AGE, "86400");
+	}
+	
 	/**
 	 * 	发送JSON响应。
 	 * @param ctx
@@ -829,9 +837,7 @@ public class LlamaServer {
 		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
 		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
 		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type");
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
+		setCorsHeaders(response.headers());
 		response.content().writeBytes(content);
 
 		ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
@@ -861,6 +867,7 @@ public class LlamaServer {
 		HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
 		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, fileLength);
 		response.headers().set(HttpHeaderNames.CONTENT_TYPE, LlamaServer.getContentType(file.getName()));
+		setCorsHeaders(response.headers());
 
 		// 设置缓存头
 		response.headers().set(HttpHeaderNames.CACHE_CONTROL, "max-age=3600");
@@ -893,9 +900,7 @@ public class LlamaServer {
         byte[] content = message.getBytes(CharsetUtil.UTF_8);
         response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=UTF-8");
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
-        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type");
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
+        setCorsHeaders(response.headers());
         response.content().writeBytes(content);
 
         ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
@@ -916,6 +921,7 @@ public class LlamaServer {
 		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
 		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=UTF-8");
 		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
+		setCorsHeaders(response.headers());
 		response.content().writeBytes(content);
 		ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
 			@Override
@@ -929,9 +935,7 @@ public class LlamaServer {
     public static void sendCorsResponse(ChannelHandlerContext ctx) {
 		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
 
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type");
-		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
+		setCorsHeaders(response.headers());
 		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, 0);
 
 		ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
