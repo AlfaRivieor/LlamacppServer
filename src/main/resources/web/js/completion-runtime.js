@@ -130,7 +130,37 @@ function formatTimingsText(timings) {
   const promptTotal = cacheN + promptN;
   const total = promptTotal + predictedN;
   if (!Number.isFinite(total) || total <= 0) return '';
-  return `令牌统计：提示词 ${promptTotal}（缓存 ${cacheN} + 新增 ${promptN}），生成 ${predictedN}，合计 ${total}`;
+
+  const promptMs = normalizeTimingsNumber(timings.prompt_ms);
+  const predictedMs = normalizeTimingsNumber(timings.predicted_ms);
+  const promptPerSecondRaw = normalizeTimingsNumber(timings.prompt_per_second);
+  const predictedPerSecondRaw = normalizeTimingsNumber(timings.predicted_per_second);
+
+  const promptPerSecond = (promptPerSecondRaw != null && promptPerSecondRaw > 0)
+    ? promptPerSecondRaw
+    : ((promptMs != null && promptMs > 0 && promptTotal > 0) ? (promptTotal / (promptMs / 1000)) : null);
+  const predictedPerSecond = (predictedPerSecondRaw != null && predictedPerSecondRaw > 0)
+    ? predictedPerSecondRaw
+    : ((predictedMs != null && predictedMs > 0 && predictedN > 0) ? (predictedN / (predictedMs / 1000)) : null);
+
+  function fmtRate(v) {
+    if (v == null) return '';
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    if (n >= 100) return n.toFixed(0);
+    if (n >= 10) return n.toFixed(1);
+    return n.toFixed(2);
+  }
+
+  const lines = [];
+  lines.push(`令牌统计：提示词 ${promptTotal}（缓存 ${cacheN} + 新增 ${promptN}），生成 ${predictedN}，合计 ${total}`);
+  const speedParts = [];
+  const promptRateText = fmtRate(promptPerSecond);
+  if (promptRateText) speedParts.push(`预填充 ${promptRateText} token/s`);
+  const predictedRateText = fmtRate(predictedPerSecond);
+  if (predictedRateText) speedParts.push(`输出 ${predictedRateText} token/s`);
+  if (speedParts.length) lines.push(`速度：${speedParts.join('，')}`);
+  return lines.join('\n');
 }
 
 function upsertTimingsLog(messageId, timings) {
