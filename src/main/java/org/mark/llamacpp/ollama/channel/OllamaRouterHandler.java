@@ -53,7 +53,15 @@ public class OllamaRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 	 */
 	private OllamaChatService ollamaChatService = new OllamaChatService();
 	
+	/**
+	 * 	
+	 */
 	private OllamaEmbedService ollamaEmbedService = new OllamaEmbedService();
+	
+	
+	public OllamaRouterHandler() {
+		
+	}
 	
 	@Override
 	protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
@@ -65,11 +73,6 @@ public class OllamaRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 				ReferenceCountUtil.release(retained);
 			}
 		});
-	}
-	
-	
-	public OllamaRouterHandler() {
-		
 	}
 	
 	/**
@@ -181,9 +184,15 @@ public class OllamaRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 		response.content().writeBytes(content);
 		ctx.writeAndFlush(response).addListener(f -> ctx.close());
 	}
+	
 	@Override
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
 		logger.info("处理请求时发生异常", cause);
+		try {
+			this.ollamaChatService.channelInactive(ctx);
+		} catch (Exception e) {
+			e.printStackTrace();
+		};
 		ctx.close();
 	}
 }

@@ -54,6 +54,12 @@ public class OllamaChatService {
 	 */
 	private final ExecutorService worker = Executors.newVirtualThreadPerTaskExecutor();
 	
+	/**
+	 * 	转发用的HTTP客户端连接。
+	 */
+	private HttpURLConnection connection = null;
+	
+	
 	public OllamaChatService() {
 		
 	}
@@ -70,7 +76,8 @@ public class OllamaChatService {
 		}
 		
 		String content = request.content().toString(StandardCharsets.UTF_8);
-		logger.info("收到 Ollama chat 请求: {}", content);
+		int contentLength = content == null ? 0 : content.length();
+		logger.info("收到 Ollama chat 请求: {} 请求体长度: {}", request.method().name(), contentLength);
 		if (content == null || content.trim().isEmpty()) {
 			Ollama.sendOllamaError(ctx, HttpResponseStatus.BAD_REQUEST, "Request body is empty");
 			return;
@@ -151,36 +158,45 @@ public class OllamaChatService {
 
 		String requestBody = JsonUtil.toJson(openAiReq);
 
+		int requestBodyLength = requestBody == null ? 0 : requestBody.length();
+		logger.info("转发请求到llama.cpp进程: {} {} 端口: {} 请求体长度: {}", request.method().name(), "/v1/chat/completions", port, requestBodyLength);
+		
 		boolean finalIsStream = isStream;
 		this.worker.execute(() -> {
-			HttpURLConnection connection = null;
 			try {
 				String targetUrl = String.format("http://localhost:%d/v1/chat/completions", port.intValue());
+				
+				logger.info("连接到llama.cpp进程: {}", targetUrl);
+				
 				URL url = URI.create(targetUrl).toURL();
-				connection = (HttpURLConnection) url.openConnection();
-				connection.setRequestMethod("POST");
-				connection.setConnectTimeout(36000 * 1000);
-				connection.setReadTimeout(36000 * 1000);
-				connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-				connection.setDoOutput(true);
+				this.connection = (HttpURLConnection) url.openConnection();
+				this.connection.setRequestMethod("POST");
+				this.connection.setConnectTimeout(36000 * 1000);
+				this.connection.setReadTimeout(36000 * 1000);
+				this.connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+				this.connection.setDoOutput(true);
 				byte[] input = requestBody.getBytes(StandardCharsets.UTF_8);
-				connection.setRequestProperty("Content-Length", String.valueOf(input.length));
-				try (OutputStream os = connection.getOutputStream()) {
+				this.connection.setRequestProperty("Content-Length", String.valueOf(input.length));
+				try (OutputStream os = this.connection.getOutputStream()) {
 					os.write(input, 0, input.length);
+					logger.info("已发送请求体到llama.cpp进程，大小: {} 字节", input.length);
 				}
 
-				int responseCode = connection.getResponseCode();
+				int responseCode = this.connection.getResponseCode();
+				
+				logger.info("llama.cpp进程响应码: {}", responseCode);
+				
 				if (finalIsStream) {
-					this.handleOllamaChatStreamResponse(ctx, connection, responseCode, modelName);
+					this.handleOllamaChatStreamResponse(ctx, this.connection, responseCode, modelName);
 				} else {
-					this.handleOllamaChatNonStreamResponse(ctx, connection, responseCode, modelName);
+					this.handleOllamaChatNonStreamResponse(ctx, this.connection, responseCode, modelName);
 				}
 			} catch (Exception e) {
 				logger.info("处理Ollama chat请求时发生错误", e);
 				Ollama.sendOllamaError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
 			} finally {
-				if (connection != null) {
-					connection.disconnect();
+				if (this.connection != null) {
+					this.connection.disconnect();
 				}
 			}
 		});
@@ -202,6 +218,7 @@ public class OllamaChatService {
 			Ollama.sendOllamaError(ctx, HttpResponseStatus.valueOf(responseCode), msg == null ? responseBody : msg);
 			return;
 		}
+		logger.info("非流式响应读取完成，响应体长度: {}", responseBody == null ? 0 : responseBody.length());
 		
 		JsonObject parsed = null;
 		try {
@@ -310,11 +327,14 @@ public class OllamaChatService {
 		HttpUtil.setTransferEncodingChunked(response, true);
 		ctx.writeAndFlush(response);
 		
+		logger.info("开始处理流式响应，响应码: {}", responseCode);
+		
 		String doneReason = "stop";
 		Map<Integer, String> toolCallIndexToId = new HashMap<>();
 		String functionCallId = null;
 		String functionCallName = null;
 		JsonObject timings = null;
+		int chunkCount = 0;
 		
 		try (BufferedReader br = new BufferedReader(
 			new InputStreamReader(
@@ -323,8 +343,10 @@ public class OllamaChatService {
 			)
 		)) {
 			String line;
+			
 			while ((line = br.readLine()) != null) {
 				if (!ctx.channel().isActive()) {
+					logger.info("检测到客户端连接已断开，停止流式响应处理");
 					if (connection != null) {
 						connection.disconnect();
 					}
@@ -335,8 +357,10 @@ public class OllamaChatService {
 				}
 				String data = line.substring(6);
 				if ("[DONE]".equals(data)) {
+					logger.info("收到流式响应结束标记");
 					Map<String, Object> timingFields = OllamaApiTool.buildOllamaTimingFields(timings);
-					writeOllamaStreamChunk(ctx, modelName, "", null, true, doneReason, timingFields);
+					this.writeOllamaStreamChunk(ctx, modelName, "", null, true, doneReason, timingFields);
+					chunkCount++;
 					break;
 				}
 				JsonObject chunk = ParamTool.tryParseObject(data);
@@ -401,11 +425,23 @@ public class OllamaChatService {
 				boolean hasToolCalls = deltaToolCalls != null && !deltaToolCalls.isJsonNull();
 				if (hasContent || hasThinking || hasToolCalls) {
 					JsonElement ollamaToolCalls = hasToolCalls ? OllamaApiTool.toOllamaToolCalls(deltaToolCalls) : null;
-					writeOllamaStreamChunk(ctx, modelName, hasContent ? deltaContent : "", hasThinking ? deltaThinking : null, ollamaToolCalls, false, null, null);
+					this.writeOllamaStreamChunk(ctx, modelName, hasContent ? deltaContent : "", hasThinking ? deltaThinking : null, ollamaToolCalls, false, null, null);
+					chunkCount++;
 				}
 			}
+			logger.info("流式响应处理完成，共发送 {} 个数据块", chunkCount);
 		} catch (Exception e) {
 			logger.info("处理Ollama chat流式响应时发生错误", e);
+			// 检查是否是客户端断开连接导致的异常
+			if (e.getMessage() != null &&
+				(e.getMessage().contains("Connection reset by peer") ||
+				 e.getMessage().contains("Broken pipe") ||
+				 e.getMessage().contains("Connection closed"))) {
+				logger.info("检测到客户端断开连接，尝试断开与llama.cpp的连接");
+				if (connection != null) {
+					connection.disconnect();
+				}
+			}
 			throw e;
 		}
 		
@@ -475,6 +511,7 @@ public class OllamaChatService {
 		ChannelFuture f = ctx.writeAndFlush(httpContent);
 		f.addListener((ChannelFutureListener) future -> {
 			if (!future.isSuccess()) {
+				logger.info("写入流式数据失败，可能是客户端断开连接: {}", future.cause().getMessage());
 				ctx.close();
 			}
 		});
@@ -517,6 +554,27 @@ public class OllamaChatService {
 				openAiReq.add("stop", stop.deepCopy());
 			} else if (stop.isJsonPrimitive()) {
 				openAiReq.add("stop", stop.deepCopy());
+			}
+		}
+	}
+	
+	/**
+	 * 	当连接断开时调用，用于清理{@link #channelConnectionMap}
+	 * 
+	 * @param ctx
+	 * @throws Exception
+	 */
+	public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+		// 关闭正在进行的链接
+		synchronized (this) {
+			logger.info("检测到客户端连接已断开，尝试断开与llama.cpp的连接");
+			HttpURLConnection conn = this.connection;
+			if (conn != null) {
+				try {
+					conn.disconnect();
+				} catch (Exception e) {
+					logger.info("断开与llama.cpp的连接时发生错误", e);
+				}
 			}
 		}
 	}

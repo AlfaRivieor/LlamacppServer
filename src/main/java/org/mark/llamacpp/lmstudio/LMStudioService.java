@@ -866,8 +866,8 @@ public class LMStudioService {
 				// 这里生成最后的性能状态信息。
 				JsonObject completion = this.buildLmStudioCompletion(modelName, completionId, created, fullContent.toString(), timings, finishReason);
 				
-				// 这里做一个调试日志
-				logger.info("测试输出 - lmstudio响应结果：{}", completion);
+				//// 这里做一个调试日志
+				//logger.info("测试输出 - lmstudio响应结果：{}", completion);
 				String out = "data: " + JsonUtil.toJson(completion) + "\r\n\r\n";
 				ByteBuf buf = ctx.alloc().buffer();
 				buf.writeBytes(out.getBytes(StandardCharsets.UTF_8));

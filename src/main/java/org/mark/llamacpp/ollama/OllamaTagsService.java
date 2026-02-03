@@ -21,11 +21,11 @@ import io.netty.handler.codec.http.HttpResponseStatus;
  */
 public class OllamaTagsService {
 	
+	
+	
 	public OllamaTagsService() {
 		
 	}
-	
-	
 	
 	/**
 	 * 	处理模型列表
