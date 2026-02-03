@@ -8,6 +8,9 @@
 ---
 > **提醒**：目前支持英语版本，会根据浏览器的语言设置自动切换，也可以在url中通过lang参数手动指定英语（如：http:127.0.0.1:8080/?lang=en）。
 ---
+> **提醒**：最新开源的Step-3.5-Flash，似乎无法通过Ollama兼容API调用，存在聊天模板的问题，待解决。
+---
+
 
 ## API兼容情况（llamacpp自身支持OpenAI Compatible和Anthropic API）
 | 类型 | 接口路径 | 说明 |
