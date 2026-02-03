@@ -1,5 +1,22 @@
 // 这里生成发送的消息
 // 构造/v1/completions用的消息。
+function t(key, fallback) {
+  if (window.I18N && typeof window.I18N.t === 'function') {
+    return window.I18N.t(key, fallback);
+  }
+  return fallback == null ? key : fallback;
+}
+
+function tf(key, params, fallback) {
+  const template = t(key, fallback);
+  if (!params || template == null) return template;
+  let out = String(template);
+  for (const k of Object.keys(params)) {
+    out = out.split(`{${k}}`).join(String(params[k]));
+  }
+  return out;
+}
+
 function buildPrompt(messages) {
   const lines = [];
   const sys = (els.systemPrompt.value || '').trim();
@@ -153,13 +170,24 @@ function formatTimingsText(timings) {
   }
 
   const lines = [];
-  lines.push(`令牌统计：提示词 ${promptTotal}（缓存 ${cacheN} + 新增 ${promptN}），生成 ${predictedN}，合计 ${total}`);
+  lines.push(tf(
+    'page.chat.completion.timings.tokens',
+    { promptTotal, cacheN, promptN, predictedN, total },
+    '令牌统计：提示词 {promptTotal}（缓存 {cacheN} + 新增 {promptN}），生成 {predictedN}，合计 {total}'
+  ));
   const speedParts = [];
   const promptRateText = fmtRate(promptPerSecond);
-  if (promptRateText) speedParts.push(`预填充 ${promptRateText} token/s`);
+  if (promptRateText) {
+    speedParts.push(tf('page.chat.completion.timings.prompt_rate', { rate: promptRateText }, '预填充 {rate} token/s'));
+  }
   const predictedRateText = fmtRate(predictedPerSecond);
-  if (predictedRateText) speedParts.push(`输出 ${predictedRateText} token/s`);
-  if (speedParts.length) lines.push(`速度：${speedParts.join('，')}`);
+  if (predictedRateText) {
+    speedParts.push(tf('page.chat.completion.timings.predicted_rate', { rate: predictedRateText }, '输出 {rate} token/s'));
+  }
+  if (speedParts.length) {
+    const sep = t('page.chat.completion.list_separator', '，');
+    lines.push(tf('page.chat.completion.timings.speed', { parts: speedParts.join(sep) }, '速度：{parts}'));
+  }
   return lines.join('\n');
 }
 
@@ -285,7 +313,7 @@ async function consumeSseStream(res, assistantMsgId) {
       const json = JSON.parse(data);
       if (json?.error) {
         const errMsg = (json?.error?.message != null ? String(json.error.message) : String(json.error));
-        const err = new Error(errMsg || '请求失败');
+        const err = new Error(errMsg || t('common.request_failed', '请求失败'));
         err.name = 'SseError';
         throw err;
       }
@@ -340,7 +368,7 @@ async function consumeSseStream(res, assistantMsgId) {
     }
   }
   if (!gotDone && !sawAnyUsefulDelta) {
-    const err = new Error(rawErrorCandidate || '请求失败');
+    const err = new Error(rawErrorCandidate || t('common.request_failed', '请求失败'));
     err.name = 'SseError';
     throw err;
   }
@@ -515,7 +543,7 @@ const TOOL_OUTPUT_UI_LIMIT = 20000;
 
 function buildTruncationNote(totalChars) {
   const n = Number.isFinite(totalChars) ? totalChars : Number(totalChars || 0);
-  return '\n…(内容过长已截断，总长度 ' + (Number.isFinite(n) ? n : 0) + ' 字符)';
+  return tf('page.chat.completion.truncate.note', { n: (Number.isFinite(n) ? n : 0) }, '\n…(内容过长已截断，总长度 {n} 字符)');
 }
 
 function truncateWithNote(text, limit, totalChars) {
@@ -573,13 +601,13 @@ async function executeToolCalls(toolCalls, preparedQuery) {
       tool_name: name,
       tool_arguments: args,
       tool_status: 'pending',
-      uiContent: '执行中…'
+      uiContent: t('page.chat.completion.tool.ui.pending', '执行中…')
     });
     msgIdByToolCallId.set(toolCallId, msg.id);
   }
 
   if (pending.length) {
-    await flushSave('工具请求');
+    await flushSave(t('page.chat.completion.save_reason.tool_request', '工具请求'));
   }
 
   const results = [];
@@ -596,7 +624,7 @@ async function executeToolCalls(toolCalls, preparedQuery) {
         m.tool_status = 'cancelled';
         m.noContext = true;
       }
-      setMessageUiAndContent(messageId, '已取消', '');
+      setMessageUiAndContent(messageId, t('page.chat.completion.tool.ui.cancelled', '已取消'), '');
     }
   }
   for (const tc of pending) {
@@ -619,7 +647,7 @@ async function executeToolCalls(toolCalls, preparedQuery) {
       }), { signal });
       if (resp && resp.success === false) {
         hasError = true;
-        const errText = String(resp.error || '工具执行失败');
+        const errText = String(resp.error || t('page.chat.completion.tool.execute_failed', '工具执行失败'));
         const result = {
           tool_call_id: toolCallId,
           tool_name: name,
@@ -704,7 +732,7 @@ async function generateIntoMessage(contextMessages, assistantMsgId) {
   const params = currentParams();
   state.abortController = new AbortController();
   state.toolAbortController = new AbortController();
-  setStatus('生成中…');
+  setStatus(t('page.chat.completion.status.generating', '生成中…'));
   setBusyGenerating(true);
   setSaveHint('');
   let currentAssistantId = assistantMsgId;
@@ -823,7 +851,7 @@ async function generateIntoMessage(contextMessages, assistantMsgId) {
       }
 
       if (isChat && Array.isArray(toolCalls) && toolCalls.length && toolRounds < 3) {
-        setStatus('调用工具中…');
+        setStatus(t('page.chat.completion.status.calling_tools', '调用工具中…'));
         setMessageToolCalls(currentAssistantId, toolCalls);
         const curMsg = getMessageById(currentAssistantId);
         const curText = (curMsg && curMsg.content != null) ? String(curMsg.content).trim() : '';
@@ -833,39 +861,45 @@ async function generateIntoMessage(contextMessages, assistantMsgId) {
             .map(s => (s == null ? '' : String(s)).trim())
             .filter(Boolean)
             .join(', ');
-          setMessageUiAndContent(currentAssistantId, toolNames ? ('调用工具：' + toolNames) : '调用工具', '');
+          setMessageUiAndContent(
+            currentAssistantId,
+            toolNames
+              ? tf('page.chat.completion.status.calling_tools_with_names', { names: toolNames }, '调用工具：{names}')
+              : t('page.chat.completion.status.calling_tools_label', '调用工具'),
+            ''
+          );
         }
         const preparedQuery = getPreparedQueryFromMessages(state.messages);
         const r0 = await executeToolCalls(toolCalls, preparedQuery);
         const toolResults = r0?.results || [];
         const hasError = !!r0?.hasError;
-        scheduleSave('工具');
+        scheduleSave(t('page.chat.completion.save_reason.tool', '工具'));
         if (hasError) {
           const errTexts = toolResults.filter(x => x && x.is_error && x.error).map(x => String(x.error));
-          const errText = errTexts.length ? errTexts.join('\n') : '工具调用失败';
-          addSystemLog('工具调用失败：' + errText, { noContext: true });
-          setMessageUiAndContent(currentAssistantId, '工具调用失败', '');
+          const errText = errTexts.length ? errTexts.join('\n') : t('page.chat.completion.tool.call_failed', '工具调用失败');
+          addSystemLog(tf('page.chat.completion.tool.call_failed_with_error', { message: errText }, '工具调用失败：{message}'), { noContext: true });
+          setMessageUiAndContent(currentAssistantId, t('page.chat.completion.tool.call_failed', '工具调用失败'), '');
           currentAssistantId = null;
           pendingAssistantExtra = { noContext: true };
           toolRounds++;
           allowTools = false;
           includeNoContextInRequest = true;
           stopAfterThisRequest = true;
-          setStatus('工具调用失败，继续生成说明…');
+          setStatus(t('page.chat.completion.status.tool_call_failed_continue', '工具调用失败，继续生成说明…'));
           continue;
         }
         currentAssistantId = null;
         pendingAssistantExtra = null;
         toolRounds++;
-        setStatus('工具调用完成，继续生成…');
+        setStatus(t('page.chat.completion.status.tool_call_done_continue', '工具调用完成，继续生成…'));
         continue;
       }
 
       break;
     }
 
-    setStatus('完成');
-    scheduleSave('完成');
+    setStatus(t('page.chat.completion.status.done', '完成'));
+    scheduleSave(t('page.chat.completion.save_reason.done', '完成'));
   } catch (e) {
     if (currentAssistantId) {
       const m = getMessageById(currentAssistantId);
@@ -879,12 +913,12 @@ async function generateIntoMessage(contextMessages, assistantMsgId) {
       if (canDrop) removeMessageByIdSilently(currentAssistantId);
     }
     if (e.name === 'AbortError') {
-      setStatus('已停止');
-      await flushSave('停止');
+      setStatus(t('page.chat.completion.status.stopped', '已停止'));
+      await flushSave(t('page.chat.completion.save_reason.stop', '停止'));
     } else {
-      setStatus('生成失败：' + e.message);
-      addSystemLog('生成失败：' + e.message);
-      await flushSave('失败');
+      setStatus(tf('page.chat.completion.status.generation_failed', { message: e.message }, '生成失败：{message}'));
+      addSystemLog(tf('page.chat.completion.status.generation_failed', { message: e.message }, '生成失败：{message}'));
+      await flushSave(t('page.chat.completion.save_reason.failed', '失败'));
     }
   } finally {
     setBusyGenerating(false);
@@ -902,7 +936,7 @@ async function regenerateMessage(messageId) {
 
   const hasLater = idx < state.messages.length - 1;
   if (hasLater) {
-    if (!confirm('将删除该气泡之后的对话内容并从这里重新生成，继续？')) return;
+    if (!confirm(t('confirm.chat.completion.regenerate_from_here', '将删除该气泡之后的对话内容并从这里重新生成，继续？'))) return;
   }
 
   {
@@ -926,7 +960,7 @@ async function regenerateMessage(messageId) {
         const assistantMsg = addMessage('assistant', '');
         await generateIntoMessage(state.messages, assistantMsg.id);
       }
-      scheduleSave('重生成');
+      scheduleSave(t('page.chat.completion.save_reason.regenerate', '重生成'));
       return;
     }
 
@@ -934,7 +968,7 @@ async function regenerateMessage(messageId) {
     rerenderAll();
     updateMessage(msg.id, '');
     await generateIntoMessage(state.messages.slice(0, idx), msg.id);
-    scheduleSave('重生成');
+    scheduleSave(t('page.chat.completion.save_reason.regenerate', '重生成'));
     return;
   }
 
@@ -947,7 +981,7 @@ async function regenerateMessage(messageId) {
       const assistantMsg = addMessage('assistant', '');
       await generateIntoMessage(state.messages, assistantMsg.id);
     }
-    scheduleSave('重生成');
+    scheduleSave(t('page.chat.completion.save_reason.regenerate', '重生成'));
   }
 }
 
@@ -969,10 +1003,10 @@ async function saveCompletionSafely(reason) {
     await saveCompletion(reason);
   } catch (e) {
     const errText = String(e && e.message ? e.message : e);
-    setSaveHint('保存失败：' + errText);
+    setSaveHint(tf('page.chat.completion.save_hint.failed', { message: errText }, '保存失败：{message}'));
     if (state.lastSaveErrorText !== errText) {
       state.lastSaveErrorText = errText;
-      addSystemLog('保存失败：' + errText, { noContext: true });
+      addSystemLog(tf('page.chat.completion.save_hint.failed', { message: errText }, '保存失败：{message}'), { noContext: true });
     }
   }
 }
@@ -1033,14 +1067,17 @@ function buildCompletionPayload() {
 async function saveCompletion(reason) {
   if (!state.currentCompletionId) return;
   const payload = buildCompletionPayload();
-  setSaveHint('保存中…');
+  setSaveHint(t('common.saving', '保存中...'));
   await fetchJson('/api/chat/completion/save?name=' + encodeURIComponent(state.currentCompletionId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
   state.lastSavedAt = Date.now();
-  setSaveHint((reason ? ('已保存（' + reason + '）') : '已保存') + ' · ' + new Date(state.lastSavedAt).toLocaleTimeString());
+  const savedText = reason
+    ? tf('page.chat.completion.save_hint.saved_with_reason', { reason }, '已保存（{reason}）')
+    : t('toast.saved', '已保存');
+  setSaveHint(savedText + ' · ' + new Date(state.lastSavedAt).toLocaleTimeString());
   clearCompletionBackup(state.currentCompletionId);
 }
 
@@ -1048,7 +1085,7 @@ async function loadModels() {
   if (state.isLoadingModels) return;
   state.isLoadingModels = true;
   try {
-    setStatus('加载模型…');
+    setStatus(t('page.chat.concurrency.status.loading_models', '加载模型中…'));
     els.refreshModels.disabled = true;
     const data = await fetchJson('/v1/models', { method: 'GET' });
     const models = Array.isArray(data?.data) ? data.data : [];
@@ -1058,7 +1095,7 @@ async function loadModels() {
     if (models.length === 0) {
       const opt = document.createElement('option');
       opt.value = '';
-      opt.textContent = '未发现已加载模型';
+      opt.textContent = t('page.chat.concurrency.status.no_models', '未发现已加载模型');
       els.modelSelect.appendChild(opt);
       els.modelSelect.disabled = true;
     } else {
@@ -1073,9 +1110,9 @@ async function loadModels() {
         els.modelSelect.value = current;
       }
     }
-    setStatus('就绪');
+    setStatus(t('page.chat.concurrency.status.ready', '就绪'));
   } catch (e) {
-    setStatus('模型加载失败：' + e.message);
+    setStatus(tf('page.chat.concurrency.status.models_load_failed', { message: e.message }, '模型加载失败：{message}'));
   } finally {
     state.isLoadingModels = false;
     els.refreshModels.disabled = false;
@@ -1088,7 +1125,9 @@ function renderCompletions(items, currentId) {
   if (items.length === 0) {
     const li = document.createElement('li');
     li.className = 'session-item';
-    li.innerHTML = '<div class="session-meta"><div class="session-title">暂无角色</div><div class="session-sub">点击“新建角色”创建角色</div></div>';
+    li.innerHTML = '<div class="session-meta"><div class="session-title"></div><div class="session-sub"></div></div>';
+    li.querySelector('.session-title').textContent = t('page.chat.completion.sessions.empty_title', '暂无角色');
+    li.querySelector('.session-sub').textContent = t('page.chat.completion.sessions.empty_sub', '点击“新建角色”创建角色');
     li.style.cursor = 'default';
     els.sessionsList.appendChild(li);
     return;
@@ -1098,17 +1137,20 @@ function renderCompletions(items, currentId) {
     const id = s?.id == null ? '' : String(s.id);
     li.className = 'session-item' + (id && id === String(currentId || '') ? ' active' : '');
     li.dataset.id = id;
-    const title = s?.title || ('角色 ' + id);
-    const sub = (s?.updatedAt ? ('更新：' + formatTime(s.updatedAt)) : (s?.createdAt ? ('创建：' + formatTime(s.createdAt)) : ''));
+    const title = s?.title || tf('page.chat.completion.sessions.item.title_fallback', { id }, '角色 {id}');
+    const sub = (s?.updatedAt
+      ? tf('page.chat.completion.sessions.item.updated_at', { time: formatTime(s.updatedAt) }, '更新：{time}')
+      : (s?.createdAt ? tf('page.chat.completion.sessions.item.created_at', { time: formatTime(s.createdAt) }, '创建：{time}') : ''));
     li.innerHTML = `
       <div class="session-meta">
         <div class="session-title"></div>
         <div class="session-sub"></div>
       </div>
-      <button class="btn icon-btn danger" type="button" data-action="delete" title="删除">×</button>
+      <button class="btn icon-btn danger" type="button" data-action="delete" title="">×</button>
     `;
     li.querySelector('.session-title').textContent = title;
     li.querySelector('.session-sub').textContent = sub;
+    li.querySelector('button[data-action="delete"]').title = t('page.chat.completion.action.delete', '删除');
     els.sessionsList.appendChild(li);
   }
 }
@@ -1133,7 +1175,8 @@ async function loadCompletions(ensureCurrent) {
     els.sessionsList.innerHTML = '';
     const li = document.createElement('li');
     li.className = 'session-item';
-    li.innerHTML = '<div class="session-meta"><div class="session-title">加载失败</div><div class="session-sub"></div></div>';
+    li.innerHTML = '<div class="session-meta"><div class="session-title"></div><div class="session-sub"></div></div>';
+    li.querySelector('.session-title').textContent = t('page.chat.concurrency.status.load_failed', '加载失败');
     li.querySelector('.session-sub').textContent = e.message;
     li.style.cursor = 'default';
     els.sessionsList.appendChild(li);
@@ -1145,20 +1188,20 @@ async function loadCompletions(ensureCurrent) {
 async function createCompletion() {
   setCompletionsLoading(true);
   try {
-    const seedTitle = '默认角色-' + Date.now();
+    const seedTitle = tf('page.chat.completion.sessions.seed_title', { ts: Date.now() }, '默认角色-{ts}');
     const data = await fetchJson('/api/chat/completion/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: seedTitle })
     });
     const created = data?.data || {};
-    if (created.id == null) throw new Error('新建失败：缺少角色ID');
+    if (created.id == null) throw new Error(t('page.chat.completion.sessions.create_failed_missing_id', '新建失败：缺少角色ID'));
     state.currentCompletionId = String(created.id);
     state.currentCreatedAt = Number(created.createdAt || 0);
     await loadCompletions(false);
     await loadCompletion(state.currentCompletionId);
   } catch (e) {
-    els.drawerHint.textContent = '新建失败：' + e.message;
+    els.drawerHint.textContent = tf('page.chat.completion.sessions.create_failed', { message: e.message }, '新建失败：{message}');
   } finally {
     setCompletionsLoading(false);
   }
@@ -1166,7 +1209,7 @@ async function createCompletion() {
 
 async function deleteCompletion(id) {
   if (!id) return;
-  if (!confirm('确认删除该角色？此操作不可撤销。')) return;
+  if (!confirm(t('confirm.chat.completion.delete_role', '确认删除该角色？此操作不可撤销。'))) return;
   setCompletionsLoading(true);
   try {
     await fetchJson('/api/chat/completion/delete?name=' + encodeURIComponent(id), { method: 'DELETE' });
@@ -1188,7 +1231,7 @@ async function deleteCompletion(id) {
       rerenderAll();
     }
   } catch (e) {
-    els.drawerHint.textContent = '删除失败：' + e.message;
+    els.drawerHint.textContent = tf('page.chat.completion.sessions.delete_failed', { message: e.message }, '删除失败：{message}');
   } finally {
     setCompletionsLoading(false);
   }
@@ -1210,7 +1253,7 @@ async function switchCompletion(id) {
     await loadCompletion(state.currentCompletionId);
     closeDrawer();
   } catch (e) {
-    els.drawerHint.textContent = '切换失败：' + e.message;
+    els.drawerHint.textContent = tf('page.chat.completion.sessions.switch_failed', { message: e.message }, '切换失败：{message}');
   } finally {
     setCompletionsLoading(false);
   }
@@ -1416,7 +1459,7 @@ function applyCompletionData(s) {
     const topic0 = topicId();
     state.topics = [{
       id: topic0,
-      title: '默认话题',
+      title: t('page.chat.completion.topic.default', '默认话题'),
       createdAt: Date.now(),
       updatedAt: Date.now()
     }];
@@ -1449,8 +1492,8 @@ async function maybeRestoreCompletionFromBackup(completionId, serverUpdatedAt) {
   const serverMs = Number(serverUpdatedAt || 0);
   if (Number.isFinite(localUpdatedAt) && localUpdatedAt > serverMs) {
     applyCompletionData(payload);
-    setStatus('已从本地恢复未保存的记录');
-    await flushSave('恢复');
+    setStatus(t('page.chat.completion.status.restored_unsaved', '已从本地恢复未保存的记录'));
+    await flushSave(t('page.chat.completion.save_reason.restore', '恢复'));
   } else if (Number.isFinite(serverMs) && serverMs >= localUpdatedAt) {
     clearCompletionBackup(id);
   }
@@ -1466,7 +1509,7 @@ async function loadCompletion(id) {
 async function runCompletion() {
   const userText = (els.promptInput.value || '').trim();
   if (!userText) {
-    setStatus('请输入消息');
+    setStatus(t('page.chat.completion.status.enter_message', '请输入消息'));
     return;
   }
   if (!state.currentCompletionId) {
@@ -1479,7 +1522,7 @@ async function runCompletion() {
   if (state.pendingAttachment && state.pendingAttachment.file) {
     state.pendingAttachment.messageId = userMsg.id;
   }
-  await flushSave('发送');
+  await flushSave(t('page.chat.completion.save_reason.send', '发送'));
   if (!!els.streamToggle.checked) {
     await generateIntoMessage(state.messages, null);
   } else {
@@ -1490,15 +1533,17 @@ async function runCompletion() {
 
 async function kvCacheAction(action) {
   const a = String(action || '').toLowerCase();
-  const verb = a === 'load' ? '加载' : '保存';
+  const verb = a === 'load'
+    ? t('page.chat.completion.kv_cache.verb.load', '加载')
+    : t('page.chat.completion.kv_cache.verb.save', '保存');
   try {
     const modelId = els.modelSelect.value;
     if (!modelId) {
-      setStatus('请先选择一个模型');
+      setStatus(t('page.chat.completion.kv_cache.select_model_first', '请先选择一个模型'));
       return;
     }
     const slotId = 0;
-    setStatus(verb + 'KV缓存中...');
+    setStatus(tf('page.chat.completion.kv_cache.in_progress', { verb }, '{verb}KV缓存中...'));
     const response = await fetchJson('/api/models/slots/' + (a === 'load' ? 'load' : 'save'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1509,11 +1554,12 @@ async function kvCacheAction(action) {
     });
 
     if (response.success) {
-      setStatus('KV缓存' + verb + '成功');
+      setStatus(tf('page.chat.completion.kv_cache.success', { verb }, 'KV缓存{verb}成功'));
     } else {
-      setStatus('KV缓存' + verb + '失败: ' + (response.message || '未知错误'));
+      const msg = response.message || t('page.chat.completion.unknown_error', '未知错误');
+      setStatus(tf('page.chat.completion.kv_cache.failed', { verb, message: msg }, 'KV缓存{verb}失败: {message}'));
     }
   } catch (e) {
-    setStatus('KV缓存' + verb + '失败: ' + e.message);
+    setStatus(tf('page.chat.completion.kv_cache.failed', { verb, message: e.message }, 'KV缓存{verb}失败: {message}'));
   }
 }

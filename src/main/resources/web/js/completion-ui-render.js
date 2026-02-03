@@ -1,3 +1,20 @@
+function t(key, fallback) {
+  if (window.I18N && typeof window.I18N.t === 'function') {
+    return window.I18N.t(key, fallback);
+  }
+  return fallback == null ? key : fallback;
+}
+
+function tf(key, params, fallback) {
+  const template = t(key, fallback);
+  if (!params || template == null) return template;
+  let out = String(template);
+  for (const k of Object.keys(params)) {
+    out = out.split(`{${k}}`).join(String(params[k]));
+  }
+  return out;
+}
+
 function normalizeSpeakerName(name, fallback) {
   const raw = (name == null ? '' : String(name)).trim();
   const cleaned = raw.replace(/[\r\n:]+/g, ' ').trim();
@@ -30,7 +47,7 @@ function getAssistantMessageSuffix() {
 
 function getCurrentCompletionTitle() {
   const name = (els.titleInput.value || '').trim();
-  return name || '默认角色';
+  return name || t('page.chat.completion.role.default', '默认角色');
 }
 
 function refreshCompletionTitleInMessages() {
@@ -44,7 +61,7 @@ function refreshCompletionTitleInMessages() {
     if (!msg) continue;
     const left = msgEl.querySelector('.meta-left');
     if (!left) continue;
-    left.textContent = msg.role === 'user' ? userName : (msg.role === 'assistant' ? taskName : '系统');
+    left.textContent = msg.role === 'user' ? userName : (msg.role === 'assistant' ? taskName : t('page.chat.completion.role.system', '系统'));
   }
   if (els.sessionsList) {
     const active = els.sessionsList.querySelector('.session-item.active .session-title');
@@ -153,7 +170,7 @@ function setCompletionsLoading(isLoading) {
   state.isLoadingCompletions = isLoading;
   els.newSessionBtn.disabled = isLoading;
   els.reloadSessionsBtn.disabled = isLoading;
-  els.drawerHint.textContent = isLoading ? '加载中…' : '';
+  els.drawerHint.textContent = isLoading ? t('toast.loading.message', '加载中…') : '';
 }
 
 let scrollRaf = 0;
@@ -288,7 +305,7 @@ function saveEditModal() {
   if (!id) return;
   const text = (els.editTextarea.value == null ? '' : String(els.editTextarea.value));
   updateMessage(id, text);
-  scheduleSave('编辑气泡');
+  scheduleSave(t('page.chat.completion.save_reason.edit_message', '编辑气泡'));
   closeEditModal();
 }
 
@@ -296,10 +313,10 @@ function deleteMessage(messageId) {
   if (state.abortController) return;
   const entry = findMessageEntryById(messageId);
   if (!entry) return;
-  if (!confirm('确认删除该气泡？此操作不可撤销。')) return;
+  if (!confirm(t('confirm.chat.completion.delete_message', '确认删除该气泡？此操作不可撤销。'))) return;
   entry.list.splice(entry.idx, 1);
   rerenderAll();
-  scheduleSave('删除气泡');
+  scheduleSave(t('page.chat.completion.save_reason.delete_message', '删除气泡'));
 }
 
 function renderMessage(msg) {
@@ -316,7 +333,7 @@ function renderMessage(msg) {
       el.textContent = 'AI';
       applyAssistantAvatar(el);
     } else {
-      el.textContent = msg.role === 'user' ? '你' : 'SYS';
+      el.textContent = msg.role === 'user' ? t('page.chat.completion.avatar.user', '你') : 'SYS';
     }
     return el;
   })();
@@ -330,7 +347,7 @@ function renderMessage(msg) {
   left.className = 'meta-left';
   const taskName = getCurrentCompletionTitle();
   const userName = getUserSpeakerName();
-  left.textContent = msg.role === 'user' ? userName : (msg.role === 'assistant' ? taskName : (msg.role === 'tool' ? 'Tool' : '系统'));
+  left.textContent = msg.role === 'user' ? userName : (msg.role === 'assistant' ? taskName : (msg.role === 'tool' ? t('page.chat.completion.role.tool', 'Tool') : t('page.chat.completion.role.system', '系统')));
 
   const right = document.createElement('div');
   right.className = 'meta-right';
@@ -355,10 +372,10 @@ function renderMessage(msg) {
   }
 
   if (msg.role === 'assistant' || msg.role === 'user') {
-    addAction('重生成', 'ghost', () => regenerateMessage(msg.id));
+    addAction(t('page.chat.completion.action.regenerate', '重生成'), 'ghost', () => regenerateMessage(msg.id));
   }
-  addAction('编辑', 'ghost', () => openEditModal(msg.id));
-  addAction('删除', 'danger', () => deleteMessage(msg.id));
+  addAction(t('page.chat.completion.action.edit', '编辑'), 'ghost', () => openEditModal(msg.id));
+  addAction(t('page.chat.completion.action.delete', '删除'), 'danger', () => deleteMessage(msg.id));
 
   right.appendChild(timeEl);
   right.appendChild(actions);
@@ -381,7 +398,7 @@ function renderMessage(msg) {
     const details = document.createElement('details');
     details.className = 'reasoning';
     const summary = document.createElement('summary');
-    summary.textContent = '思考过程';
+    summary.textContent = t('page.chat.completion.action.thinking_details', '思考过程');
     reasoningPre = document.createElement('pre');
     reasoningPre.textContent = reasoningText;
     details.appendChild(summary);
@@ -393,20 +410,20 @@ function renderMessage(msg) {
     const details = document.createElement('details');
     details.className = 'tool-result';
     const summary = document.createElement('summary');
-    const toolName = (msg && msg.tool_name != null) ? String(msg.tool_name) : 'Tool';
-    summary.textContent = toolName + '：' + computeToolStatusText(msg);
+    const toolName = (msg && msg.tool_name != null) ? String(msg.tool_name) : t('page.chat.completion.role.tool', 'Tool');
+    summary.textContent = toolName + t('page.chat.completion.punctuation.colon', '：') + computeToolStatusText(msg);
     details.appendChild(summary);
     const argsText = (msg && msg.tool_arguments != null) ? String(msg.tool_arguments) : '';
     const reqLabel = document.createElement('div');
     reqLabel.className = 'tool-io-label';
-    reqLabel.textContent = '请求';
+    reqLabel.textContent = t('page.chat.completion.tool.label.request', '请求');
     const reqPre = document.createElement('pre');
     reqPre.className = 'tool-io-box tool-io-request';
-    reqPre.textContent = String(argsText).trim() ? argsText : '(空)';
+    reqPre.textContent = String(argsText).trim() ? argsText : t('page.chat.completion.tool.empty_paren', '(空)');
 
     const respLabel = document.createElement('div');
     respLabel.className = 'tool-io-label';
-    respLabel.textContent = '响应';
+    respLabel.textContent = t('page.chat.completion.tool.label.response', '响应');
     const respBox = document.createElement('div');
     respBox.className = 'tool-io-box tool-io-response';
     respBox.appendChild(content);
@@ -446,10 +463,10 @@ function renderMessage(msg) {
 
 function computeToolStatusText(msg) {
   const status = (msg && msg.tool_status != null) ? String(msg.tool_status) : '';
-  if (status === 'pending') return '执行中';
-  if (status === 'cancelled') return '已取消';
-  if (msg && msg.is_error) return '失败';
-  return '结果';
+  if (status === 'pending') return t('page.chat.completion.tool.status.pending', '执行中');
+  if (status === 'cancelled') return t('page.chat.completion.tool.status.cancelled', '已取消');
+  if (msg && msg.is_error) return t('page.chat.completion.tool.status.failed', '失败');
+  return t('page.chat.completion.tool.status.result', '结果');
 }
 
 function syncToolMessageMeta(id) {
@@ -462,14 +479,14 @@ function syncToolMessageMeta(id) {
 
   const summary = wrap.querySelector('details.tool-result > summary');
   if (summary) {
-    const toolName = (msg.tool_name != null) ? String(msg.tool_name) : 'Tool';
-    summary.textContent = toolName + '：' + computeToolStatusText(msg);
+    const toolName = (msg.tool_name != null) ? String(msg.tool_name) : t('page.chat.completion.role.tool', 'Tool');
+    summary.textContent = toolName + t('page.chat.completion.punctuation.colon', '：') + computeToolStatusText(msg);
   }
 
   const reqPre = wrap.querySelector('pre.tool-io-request');
   if (reqPre) {
     const argsText = (msg.tool_arguments != null) ? String(msg.tool_arguments) : '';
-    reqPre.textContent = String(argsText).trim() ? argsText : '(空)';
+    reqPre.textContent = String(argsText).trim() ? argsText : t('page.chat.completion.tool.empty_paren', '(空)');
   }
 }
 
@@ -729,7 +746,8 @@ function getAvatarUploadInput() {
     try {
       await uploadAvatarForCurrentRole(file);
     } catch (err) {
-      alert('头像上传失败：' + (err && err.message ? err.message : String(err)));
+      const msg = (err && err.message ? err.message : String(err));
+      alert(tf('page.chat.completion.avatar.upload_failed', { message: msg }, '头像上传失败：{message}'));
     }
   });
   document.body.appendChild(input);
@@ -741,17 +759,19 @@ async function uploadAvatarForCurrentRole(file) {
   if (!file) return;
   const maxBytes = 1024 * 1024;
   if (typeof file.size === 'number' && file.size > maxBytes) {
-    throw new Error('头像图片需小于1MB');
+    throw new Error(t('page.chat.completion.avatar.size_limit', '头像图片需小于1MB'));
   }
   const allow = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
   const ext = getFileExt(file && file.name ? file.name : '');
   const type = (file && file.type) ? String(file.type).toLowerCase() : '';
   const typeOk = type === 'image/png' || type === 'image/jpeg' || type === 'image/gif' || type === 'image/webp';
   const extOk = allow.includes(ext);
-  if (!typeOk && !extOk) throw new Error('仅支持图片格式: png/jpg/jpeg/gif/webp');
+  if (!typeOk && !extOk) {
+    throw new Error(tf('page.chat.completion.avatar.type_limit', { types: 'png/jpg/jpeg/gif/webp' }, '仅支持图片格式: {types}'));
+  }
   const id = state.currentCompletionId;
   if (!id) {
-    throw new Error('缺少角色ID');
+    throw new Error(t('page.chat.completion.avatar.missing_role_id', '缺少角色ID'));
   }
   const fd = new FormData();
   fd.append('file', file, file.name || 'avatar');
@@ -879,7 +899,7 @@ function updateReasoning(id, reasoning) {
       const details = document.createElement('details');
       details.className = 'reasoning';
       const summary = document.createElement('summary');
-      summary.textContent = '思考过程';
+      summary.textContent = t('page.chat.completion.action.thinking_details', '思考过程');
       const newPre = document.createElement('pre');
       newPre.textContent = reasoningText;
       details.appendChild(summary);
