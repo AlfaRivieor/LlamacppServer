@@ -120,6 +120,10 @@ public class OllamaChatService {
 			}
 		} catch (Exception ignore) {
 		}
+		
+		
+		System.err.println(content);
+		
 		// 是否带了工具
 		boolean hasTools = false;
 		try {
@@ -176,7 +180,7 @@ public class OllamaChatService {
 				this.connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
 				this.connection.setDoOutput(true);
 				byte[] input = requestBody.getBytes(StandardCharsets.UTF_8);
-				this.connection.setRequestProperty("Content-Length", String.valueOf(input.length));
+				//this.connection.setRequestProperty("Content-Length", String.valueOf(input.length));
 				try (OutputStream os = this.connection.getOutputStream()) {
 					os.write(input, 0, input.length);
 					logger.info("已发送请求体到llama.cpp进程，大小: {} 字节", input.length);
