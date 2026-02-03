@@ -184,6 +184,13 @@ public class OllamaRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 		response.content().writeBytes(content);
 		ctx.writeAndFlush(response).addListener(f -> ctx.close());
 	}
+
+	@Override
+	public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+		logger.info("ollama 客户端连接关闭：{}", ctx);
+		this.ollamaChatService.channelInactive(ctx);
+		super.channelInactive(ctx);
+	}
 	
 	@Override
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {

@@ -16,6 +16,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -40,6 +41,8 @@ public class Ollama {
 	 * 	
 	 */
 	private static final Logger logger = LoggerFactory.getLogger(Ollama.class);
+	
+	private static final int MAX_HTTP_CONTENT_LENGTH = 16 * 1024 * 1024;
 	
 	
 	private volatile Thread worker;
@@ -128,12 +131,14 @@ public class Ollama {
 			ServerBootstrap bootstrap = new ServerBootstrap();
 			bootstrap.group(localBossGroup, localWorkerGroup)
 					.channel(NioServerSocketChannel.class)
+					.option(ChannelOption.SO_BACKLOG, 1024)
+					.childOption(ChannelOption.SO_KEEPALIVE, true)
 					.childHandler(new ChannelInitializer<SocketChannel>() {
 						@Override
 						protected void initChannel(SocketChannel ch) throws Exception {
 							ch.pipeline()
 									.addLast(new HttpServerCodec())
-									.addLast(new HttpObjectAggregator(Integer.MAX_VALUE))
+									.addLast(new HttpObjectAggregator(MAX_HTTP_CONTENT_LENGTH))
 									.addLast(new ChunkedWriteHandler())
 									.addLast(new OllamaRouterHandler());
 						}

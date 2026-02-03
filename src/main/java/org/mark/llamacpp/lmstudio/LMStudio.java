@@ -11,6 +11,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -33,6 +34,8 @@ public class LMStudio {
 	
 	
 	private static final LMStudio INSTANCE = new LMStudio();
+	
+	private static final int MAX_HTTP_CONTENT_LENGTH = 16 * 1024 * 1024;
 	
 	public static LMStudio getInstance() {
 		return INSTANCE;
@@ -114,12 +117,14 @@ public class LMStudio {
 			ServerBootstrap bootstrap = new ServerBootstrap();
 			bootstrap.group(localBossGroup, localWorkerGroup)
 					.channel(NioServerSocketChannel.class)
+					.option(ChannelOption.SO_BACKLOG, 1024)
+					.childOption(ChannelOption.SO_KEEPALIVE, true)
 					.childHandler(new ChannelInitializer<SocketChannel>() {
 						@Override
 						protected void initChannel(SocketChannel ch) throws Exception {
 							ch.pipeline()
 									.addLast(new HttpServerCodec())
-									.addLast(new HttpObjectAggregator(Integer.MAX_VALUE))
+									.addLast(new HttpObjectAggregator(MAX_HTTP_CONTENT_LENGTH))
 									.addLast(new ChunkedWriteHandler())
 									.addLast(new LMStudioWsPathSelectHandler())
 									.addLast(new LMStudioRouterHandler())
