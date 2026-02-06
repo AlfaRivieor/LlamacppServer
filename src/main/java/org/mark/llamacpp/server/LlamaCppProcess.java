@@ -306,7 +306,9 @@ public class LlamaCppProcess {
 					if (this.outputHandler != null) {
 						this.outputHandler.accept(line);
 					}
-					logger.info(line);
+					if(!line.contains("update_slots") && !line.contains("log_server_r")) {
+						logger.info(line);
+					}
 				}
 			} catch (IOException e) {
 				if (this.isRunning.get() && this.outputThread != null) {

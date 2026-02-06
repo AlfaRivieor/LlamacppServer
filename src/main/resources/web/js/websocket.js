@@ -39,6 +39,7 @@ function handleWebSocketMessage(message) {
                 case 'modelStop': handleModelStopEvent(data); break;
                 case 'notification': showToast(data.title || '通知', data.message || '', data.level || 'info'); break;
                 case 'model_status': handleModelStatusUpdate(data); break;
+                case 'model_slots': handleModelSlotsUpdate(data); break;
                 case 'console':
                     {
                         const consoleModal = document.getElementById('consoleModal');
@@ -111,6 +112,18 @@ function handleModelStopEvent(data) {
     if (data.success) {
         if (typeof removeModelLoadingState === 'function') removeModelLoadingState(data.modelId);
         applyModelPatch(data.modelId, { isLoading: false, isLoaded: false, status: 'stopped', port: null });
+    }
+}
+
+function handleModelSlotsUpdate(data) {
+    if (!data || !data.modelId) return;
+    const slots = Array.isArray(data.slots) ? data.slots : [];
+    const i = Array.isArray(currentModelsData) ? currentModelsData.findIndex(m => m && m.id === data.modelId) : -1;
+    if (i >= 0) {
+        currentModelsData[i].slots = slots;
+    }
+    if (typeof updateModelSlotsDom === 'function') {
+        updateModelSlotsDom(data.modelId, slots);
     }
 }
 

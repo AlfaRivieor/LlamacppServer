@@ -27,6 +27,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
@@ -132,7 +134,9 @@ public class LlamaServerManager {
 	/**
 	 * 线程池，用于异步执行模型加载任务
 	 */
-	private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+	private final ExecutorService executorService = Executors.newSingleThreadExecutor(Thread.ofVirtual().name("llama-loader-", 0).factory());
+	
+	private final ScheduledExecutorService slotsScheduler = new ScheduledThreadPoolExecutor(1, Thread.ofVirtual().name("llama-slots-", 0).factory());
 	
 	/**
 	 *
@@ -140,6 +144,7 @@ public class LlamaServerManager {
 	private LlamaServerManager() {
 		// 尝试从配置文件加载设置
 		this.loadSettingsFromFile();
+		this.startSlotsPolling();
 	}
 	
 	/**
@@ -194,6 +199,57 @@ public class LlamaServerManager {
     public List<ModelPathDataStruct> getModelPaths() {
         return new ArrayList<>(this.modelPaths);
     }
+	
+	private void startSlotsPolling() {
+		this.slotsScheduler.scheduleAtFixedRate(() -> {
+			try {
+				Map<String, LlamaCppProcess> loaded = this.getLoadedProcesses();
+				if (loaded.isEmpty()) {
+					return;
+				}
+				for (String modelId : loaded.keySet()) {
+					if (modelId == null || modelId.isBlank()) {
+						continue;
+					}
+					JsonObject resp;
+					try {
+						resp = this.handleModelSlotsGet(modelId);
+					} catch (Exception e) {
+						continue;
+					}
+					JsonArray slots = resp != null && resp.has("slots") && resp.get("slots").isJsonArray()
+							? resp.getAsJsonArray("slots")
+							: null;
+					if (slots == null) {
+						continue;
+					}
+					JsonArray filtered = new JsonArray();
+					for (JsonElement el : slots) {
+						if (el == null || !el.isJsonObject()) {
+							continue;
+						}
+						JsonObject slot = el.getAsJsonObject();
+						JsonObject out = new JsonObject();
+						if (slot.has("id") && !slot.get("id").isJsonNull()) {
+							out.add("id", slot.get("id"));
+						}
+						boolean speculative = slot.has("speculative") && !slot.get("speculative").isJsonNull()
+								? slot.get("speculative").getAsBoolean()
+								: false;
+						boolean isProcessing = slot.has("is_processing") && !slot.get("is_processing").isJsonNull()
+								? slot.get("is_processing").getAsBoolean()
+								: false;
+						out.addProperty("speculative", speculative);
+						out.addProperty("is_processing", isProcessing);
+						filtered.add(out);
+					}
+					LlamaServer.sendModelSlotsEvent(modelId, filtered);
+				}
+			} catch (Exception e) {
+				logger.info("轮询slots时发生错误", e);
+			}
+		}, 1, 1, TimeUnit.SECONDS);
+	}
 	
 	/**
 	 * 	获取模型列表。
@@ -1032,6 +1088,11 @@ public class LlamaServerManager {
 								}
 							}
 						}
+						// 继续添加新东西
+						// TODO
+						
+						
+						
 						process.setCtxSize(ctxSize);
 					}catch (Exception e) {
 						e.printStackTrace();

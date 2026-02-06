@@ -12,6 +12,10 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import org.mark.llamacpp.server.LlamaServerManager;
+import org.mark.llamacpp.server.tools.JsonUtil;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 /**
  * WebSocket连接管理器
@@ -214,6 +218,15 @@ public class WebSocketManager {
         );
         
         broadcast(eventMessage);
+    }
+
+    public void sendModelSlotsEvent(String modelId, JsonArray slots) {
+        JsonObject event = new JsonObject();
+        event.addProperty("type", "model_slots");
+        event.addProperty("modelId", modelId == null ? "" : modelId);
+        event.add("slots", slots == null ? new JsonArray() : slots);
+        event.addProperty("timestamp", System.currentTimeMillis());
+        broadcast(JsonUtil.toJson(event));
     }
     
     public void sendConsoleLineEvent(String modelId, String line) {

@@ -222,6 +222,7 @@ function renderModelsList(models) {
                             <div class="model-name" title="${model.name}" onclick="openAliasModal(decodeURIComponent('${encodeURIComponent(model.id)}'), decodeURIComponent('${encodeURIComponent(model.name)}'), decodeURIComponent('${encodeURIComponent(model.alias || '')}'))">
                                 ${displayName}
                                 ${model.isMultimodal ? '<span class="vision-badge"><i class="fas fa-image"></i></span>' : ''}
+                                <span class="model-slots" id="slots-${encodeURIComponent(model.id)}">${renderSlotsSquaresInner(model.slots)}</span>
                             </div>
                             <div class="model-meta">
                                 <span><i class="fas fa-layer-group"></i> ${architecture}</span>
@@ -242,6 +243,32 @@ function renderModelsList(models) {
     if (input) filterModels(input.value);
 }
 
+function renderSlotsSquaresInner(slots) {
+    try {
+        if (!Array.isArray(slots) || slots.length === 0) return '';
+        let s = '';
+        for (let i = 0; i < slots.length; i++) {
+            const it = slots[i];
+            if (!it || typeof it !== 'object') continue;
+            const id = Number.isFinite(it.id) ? it.id : i;
+            const busy = !!it.is_processing;
+            const speculative = !!it.speculative;
+            const title = `slot ${id}${speculative ? ' (speculative)' : ''}`;
+            s += `<span class="model-slot-square${busy ? ' busy' : ''}" title="${title}"></span>`;
+        }
+        return s;
+    } catch (e) {
+        return '';
+    }
+}
+
+function updateModelSlotsDom(modelId, slots) {
+    try {
+        const el = document.getElementById(`slots-${encodeURIComponent(modelId)}`);
+        if (!el) return;
+        el.innerHTML = renderSlotsSquaresInner(slots);
+    } catch (e) {}
+}
 function toggleFavouriteModel(event, modelId) {
     if (event) {
         event.preventDefault();

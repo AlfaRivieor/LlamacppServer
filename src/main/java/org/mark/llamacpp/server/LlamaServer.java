@@ -684,6 +684,10 @@ public class LlamaServer {
         WebSocketManager.getInstance().sendConsoleLineEvent(modelId, line);
     }
     
+    public static void sendModelSlotsEvent(String modelId, com.google.gson.JsonArray slots) {
+        WebSocketManager.getInstance().sendModelSlotsEvent(modelId, slots);
+    }
+    
     //================================================================================================
     
     

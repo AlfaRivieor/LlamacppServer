@@ -317,6 +317,25 @@
         }
         .model-name:hover { color: var(--primary-color); }
         
+        .model-slots {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 6px;
+        }
+        
+        .model-slot-square {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            background: #2ecc71;
+            display: inline-block;
+        }
+        
+        .model-slot-square.busy {
+            background: #e74c3c;
+        }
+        
         .vision-badge {
             color: var(--info-color);
             background-color: #eff6ff;
