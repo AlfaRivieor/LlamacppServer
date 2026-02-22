@@ -235,6 +235,7 @@ jobs:
           try_download "WIN_VULKAN" "llama-{tag}-bin-win-vulkan-x64.zip" "llama-win-vulkan.zip" "win-vulkan" "zip" "" ""
           try_download "WIN_HIP" "llama-{tag}-bin-win-hip-radeon-x64.zip" "llama-win-hip.zip" "win-hip" "zip" "" ""
           try_download "UBUNTU_VULKAN" "llama-{tag}-bin-ubuntu-vulkan-x64.tar.gz" "llama-ubuntu-vulkan.tar.gz" "ubuntu-vulkan" "tar" "" ""
+          try_download "UBUNTU_ROCM72" "llama-{tag}-bin-ubuntu-rocm-7.2-x64.tar.gz" "llama-ubuntu-rocm72.tar.gz" "ubuntu-rocm72" "tar" "" ""
 
       - name: 打包（按实际下载到的后端动态生成）
         id: package
@@ -265,6 +266,14 @@ jobs:
             mkdir -p build-linux-vulkan/llamacpp
             cp -r ubuntu-vulkan build-linux-vulkan/llamacpp/
             make_zip "build-linux-vulkan" "llama-server-${VERSION}-${UBUNTU_VULKAN_TAG}-linux-vulkan" "llama-server-${VERSION}-${UBUNTU_VULKAN_TAG}-linux-vulkan.zip"
+          fi
+
+          if [ "${UBUNTU_ROCM72_AVAILABLE:-0}" = "1" ]; then
+            cp -r build build-linux-rocm72
+            cp -r jre-linux/jre build-linux-rocm72/jre
+            mkdir -p build-linux-rocm72/llamacpp
+            cp -r ubuntu-rocm72 build-linux-rocm72/llamacpp/
+            make_zip "build-linux-rocm72" "llama-server-${VERSION}-${UBUNTU_ROCM72_TAG}-linux-rocm-7.2" "llama-server-${VERSION}-${UBUNTU_ROCM72_TAG}-linux-rocm-7.2.zip"
           fi
 
           if [ "${WIN_CUDA12_AVAILABLE:-0}" = "1" ]; then
@@ -337,6 +346,10 @@ jobs:
             echo "- Linux Vulkan: ${UBUNTU_VULKAN_TAG}" >> release_notes.md
             ANY_BACKEND=1
           fi
+          if [ "${UBUNTU_ROCM72_AVAILABLE:-0}" = "1" ]; then
+            echo "- Linux ROCm 7.2: ${UBUNTU_ROCM72_TAG}" >> release_notes.md
+            ANY_BACKEND=1
+          fi
           if [ "${WIN_CUDA12_AVAILABLE:-0}" = "1" ]; then
             echo "- Windows CUDA12: ${WIN_CUDA12_TAG}" >> release_notes.md
             ANY_BACKEND=1
@@ -404,7 +417,7 @@ jobs:
           - Windows CUDA 版本文件较大，是因为使用了 `cudart` 包，包含了 CUDA 运行环境。
           - 请根据你的 GPU 选择对应的版本：
             - NVIDIA GPU: 使用 cuda12 或 cuda13 版本
-            - AMD GPU: 使用 hip 版本
+            - AMD GPU: 使用 hip 版本，Linux系统，AI MAX+ 395（或其它ROCm7.2支持的GPU）可以使用ROCm7.2版本
             - 其他 GPU（如核显） 或不确定: 使用 vulkan 版本
             - 不需要llamacpp：使用无 llamacpp 版本
           ---
