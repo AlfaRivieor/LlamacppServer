@@ -76,6 +76,9 @@ function getModelIcon(architecture) {
 		'deepseek3': 'icon/deepseek.png',
         'step': 'icon/step35.png',
         'paddleocr': 'icon/paddleocr.png',
+		'bailingmoe': 'icon/bailingmoe.png',
+		'lfm': 'icon/lfm.png',
+		'lfm2': 'icon/lfm.png'
     };
     for (const [key, icon] of Object.entries(iconMap)) {
         if (archName.includes(key)) return icon;
