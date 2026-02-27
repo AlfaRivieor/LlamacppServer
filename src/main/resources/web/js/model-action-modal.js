@@ -267,6 +267,35 @@ function applyCmdToDynamicFields(modal, cmd) {
         el.checked = !!enabled;
     }
 
+    const cmdTrimmed = cmd === null || cmd === undefined ? '' : String(cmd).trim();
+    if (!cmdTrimmed) {
+        for (let i = 0; i < cfgList.length; i++) {
+            const p = cfgList[i];
+            if (!p) continue;
+            const fieldName = fieldNameFromParamConfig(p);
+            if (!fieldName) continue;
+            setParamEnabled(fieldName, true);
+
+            const type = (p.type === null || p.type === undefined) ? 'STRING' : String(p.type);
+            const typeUpper = String(type).toUpperCase();
+            const values = Array.isArray(p.values) ? p.values.map(v => (v === null || v === undefined) ? '' : String(v).trim()).filter(v => v.length > 0) : [];
+            let defaultValue = p.defaultValue === null || p.defaultValue === undefined ? '' : String(p.defaultValue);
+            if (!defaultValue && values.length) defaultValue = values[0];
+            if (defaultValue === null || defaultValue === undefined) defaultValue = '';
+
+            if (typeUpper === 'LOGIC') {
+                if (!defaultValue) defaultValue = '0';
+            } else if (typeUpper === 'BOOLEAN') {
+                if (!defaultValue) defaultValue = '0';
+            }
+
+            if (defaultValue !== undefined && defaultValue !== null) {
+                setFieldValue(modal, [fieldName, 'param_' + fieldName], String(defaultValue));
+            }
+        }
+        return;
+    }
+
     for (let i = 0; i < cfgList.length; i++) {
         const p = cfgList[i];
         if (!p) continue;
