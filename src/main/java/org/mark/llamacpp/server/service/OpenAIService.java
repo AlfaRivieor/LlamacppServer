@@ -238,7 +238,14 @@ public class OpenAIService {
 			if (requestJson.has("stream")) {
 				isStream = requestJson.get("stream").getAsBoolean();
 			}
-			
+			// 这个东西暂时用于控制enable_thinking，实际上是不完善的，临时解决吧。
+			if (requestJson.has("enable_thinking") && !requestJson.has("chat_template_kwargs")) {
+				// 拼接一个chat_template_kwargs进去： "chat_template_kwargs" : {"enable_thinking": false},
+				JsonObject chatTemplateKwargs = new JsonObject();
+				chatTemplateKwargs.addProperty("enable_thinking", requestJson.get("enable_thinking").getAsBoolean());
+				// 添加到主 JsonObject
+				requestJson.add("chat_template_kwargs", chatTemplateKwargs);
+			}
 			// 获取LlamaServerManager实例
 			LlamaServerManager manager = LlamaServerManager.getInstance();
 			
@@ -248,7 +255,10 @@ public class OpenAIService {
 				return;
 			}
 
-			String body = content;
+			String body = JsonUtil.toJson(requestJson);
+			
+			//logger.info("请求内容：" + body);
+			
 			// 获取模型端口
 			Integer modelPort = manager.getModelPort(modelName);
 			if (modelPort == null) {
