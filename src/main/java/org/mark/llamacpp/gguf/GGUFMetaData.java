@@ -224,12 +224,16 @@ public class GGUFMetaData {
     	case 16 -> "Q5_K_S";
     	case 17 -> "Q5_K_M";
     	case 18 -> "Q6_K";
-    	case 76 -> "MXFP4";
-    	case 38 -> "MXFP4";
-    	case 32 -> "BF16";
-        case 30 -> "IQ4_XS";
+        case 19 -> "IQ2_XXS";
+        case 23 -> "IQ3_XXS";
+        case 24 -> "IQ1_S";
         case 25 -> "IQ4_NL";
         case 29 -> "IQ2_M";
+        case 30 -> "IQ4_XS";
+        case 31 -> "IQ1_M";
+        case 32 -> "BF16";
+    	case 38 -> "MXFP4";
+    	case 76 -> "MXFP4";
     	default -> "UNKNOWN(" + fileType + ")";
     	};
     }
