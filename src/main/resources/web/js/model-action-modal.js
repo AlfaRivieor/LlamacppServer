@@ -278,15 +278,18 @@ function applyCmdToDynamicFields(modal, cmd) {
 
             const type = (p.type === null || p.type === undefined) ? 'STRING' : String(p.type);
             const typeUpper = String(type).toUpperCase();
-            const values = Array.isArray(p.values) ? p.values.map(v => (v === null || v === undefined) ? '' : String(v).trim()).filter(v => v.length > 0) : [];
-            let defaultValue = p.defaultValue === null || p.defaultValue === undefined ? '' : String(p.defaultValue);
-            if (!defaultValue && values.length) defaultValue = values[0];
-            if (defaultValue === null || defaultValue === undefined) defaultValue = '';
+            const values = Array.isArray(p.values) ? p.values.map(v => (v === null || v === undefined) ? '' : String(v).trim()) : [];
+            let defaultValue = p.defaultValue;
+            if (defaultValue === null || defaultValue === undefined) {
+                defaultValue = values.length ? values[0] : '';
+            } else {
+                defaultValue = String(defaultValue);
+            }
 
             if (typeUpper === 'LOGIC') {
-                if (!defaultValue) defaultValue = '0';
+                if (defaultValue === '') defaultValue = '0';
             } else if (typeUpper === 'BOOLEAN') {
-                if (!defaultValue) defaultValue = '0';
+                if (defaultValue === '') defaultValue = '0';
             }
 
             if (defaultValue !== undefined && defaultValue !== null) {
